@@ -7,8 +7,9 @@ from .config import (
     add_bootstrap_config,
     load_bootstrap_config,
 )
+from .densepose_head import ROI_DENSEPOSE_HEAD_REGISTRY
 from .evaluator import DensePoseCOCOEvaluator
-from .modeling.roi_heads import DensePoseROIHeads
+from .roi_head import DensePoseROIHeads
 from .data.structures import DensePoseDataRelative, DensePoseList, DensePoseTransformData
 from .modeling.test_time_augmentation import (
     DensePoseGeneralizedRCNNWithTTA,
