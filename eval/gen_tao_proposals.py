@@ -131,16 +131,13 @@ if __name__ == "__main__":
                 if not os.path.exists(json_outdir):
                     os.makedirs(json_outdir)
 
-                from eval_utils import store_json
+                from eval_utils import store_TAOjson
                 for path in tqdm.tqdm(seq, disable=not args.output):
                     # use PIL, to be consistent with evaluation
                     img = read_image(path, format="BGR")
                     predictions, visualized_output = demo.run_on_image(img)
                     valid_classes = [i for i in range(81)]
                     store_TAOjson(predictions, path, valid_classes, json_outdir)
-
-                    import pdb
-                    pdb.set_trace()
 
                     if args.output:
                         if not os.path.exists(args.output + "/" + video_name):
