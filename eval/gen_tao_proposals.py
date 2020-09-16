@@ -139,22 +139,22 @@ if __name__ == "__main__":
                     valid_classes = [i for i in range(81)]
                     store_TAOjson(predictions, path, valid_classes, json_outdir)
 
-                    if args.output:
-                        if not os.path.exists(args.output + "/" + video_name):
-                            os.makedirs(args.output + "/" + video_name)
-                        out_filename = os.path.join(args.output, video_name, os.path.basename(path))
-
-                        if os.path.isdir(args.output):
-                            assert os.path.isdir(args.output), args.output
-                        else:
-                            assert len(args.input) == 1, "Please specify a directory with args.output"
-                            out_filename = args.output
-                        visualized_output.save(out_filename)
-                    else:
-                        cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-                        cv2.imshow(WINDOW_NAME, visualized_output.get_image()[:, :, ::-1])
-                        if cv2.waitKey(0) == 27:
-                            break  # esc to quit
+                    # if args.output:
+                    #     if not os.path.exists(args.output + "/" + video_name):
+                    #         os.makedirs(args.output + "/" + video_name)
+                    #     out_filename = os.path.join(args.output, video_name, os.path.basename(path))
+                    #
+                    #     if os.path.isdir(args.output):
+                    #         assert os.path.isdir(args.output), args.output
+                    #     else:
+                    #         assert len(args.input) == 1, "Please specify a directory with args.output"
+                    #         out_filename = args.output
+                    #     visualized_output.save(out_filename)
+                    # else:
+                    #     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+                    #     cv2.imshow(WINDOW_NAME, visualized_output.get_image()[:, :, ::-1])
+                    #     if cv2.waitKey(0) == 27:
+                    #         break  # esc to quit
 
                 # average_time = sum(time_list) / len(time_list)
                 # # print("Average image processing time: ", str(average_time))

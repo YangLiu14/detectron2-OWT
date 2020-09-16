@@ -39,9 +39,18 @@ def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_la
     for ann in annotations:
         img_id = ann['image_id']
         fname = imgID2fname[img_id]
+        fname = fname.replace("jpg", "json")
+
+        # ignore certain data souces
+        src_name = fname.split("/")[1]
+        if src_name in ignored_sequences:
+            continue
+
         xc, yc, w, h = ann['bbox']
         # TODO: should I convert the bbox to [x1, y1, x2, y2] ?
-        bbox = (xc, yc, w, h)
+        # convert [xc, yc, w, h] to [x1, y1, x2, y2]
+        box = (xc, yc, w, h)
+        bbox = [box[0], box[1], box[0] + box[2], box[1] + box[3]]
         if fname in gt.keys():
             gt[fname].append(bbox)
         else:
@@ -112,7 +121,7 @@ def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop
             bboxes = [toBbox(prop["segmentation"]) for prop in props]
 
         # convert from [x0, y0, w, h] (?) to [x0, y0, x1, y1]
-        bboxes = [[box[0], box[1], box[0] + box[2], box[1] + box[3]] for box in bboxes]
+        # bboxes = [[box[0], box[1], box[0] + box[2], box[1] + box[3]] for box in bboxes]
         proposals[filename] = bboxes
 
     return proposals
@@ -163,6 +172,7 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
 
 def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
     props = load_proposals(folder, gt, ignored_sequences=ignored_sequences, score_fnc=score_fnc)
+
     iou_curve = evaluate_proposals(gt, props)
 
     iou_50 = iou_curve[50]
@@ -237,8 +247,15 @@ def evaluate_all_folders_oxford(gt, plot_title, user_specified_result_dir=None, 
     if user_specified_result_dir is not None:
         dirs = os.listdir(user_specified_result_dir)
         dirs.sort()
+
+        ignore_dirs = ["BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA"]
         for mydir in dirs:
-            print("---Eval: %s ---"%mydir)
+            if mydir[0] == '.':
+                continue  # Filter out `.DS_Store` and `._.DS_Store`
+            if mydir in ignore_dirs:
+                continue
+
+            print("---Eval: %s ---" % mydir)
             user_specified_results = evaluate_folder(gt, os.path.join(user_specified_result_dir, mydir))
             export_dict[mydir] = user_specified_results
 
@@ -256,7 +273,8 @@ def eval_recall_oxford(output_dir):
     # +++ Most common categories +++
     print("evaluating car, bike, person, bus:")
     exclude_classes = ("other",)
-    gt, n_gt_boxes = load_gt(exclude_classes, prefix_dir_name=FLAGS.labels)
+    ignored_seq = ("BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA")
+    gt, n_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
     # gt, n_gt_boxes = load_gt_oxford(exclude_classes, prefix_dir_name=FLAGS.labels)
 
     evaluate_all_folders_oxford(gt, "car, bike, person, and bus (" + str(n_gt_boxes) + " bounding boxes)",
@@ -266,7 +284,7 @@ def eval_recall_oxford(output_dir):
     # +++ "other" categories +++
     print("evaluating others:")
     exclude_classes = ("car", "bike", "person", "bus")
-    gt, n_gt_boxes = load_gt(exclude_classes, prefix_dir_name=FLAGS.labels)
+    gt, n_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
 
     evaluate_all_folders_oxford(gt, "others (" + str(n_gt_boxes) + " bounding boxes)",
                                 output_dir=output_dir,
@@ -276,8 +294,8 @@ def eval_recall_oxford(output_dir):
 def main():
 
     # Matplotlib params
-    matplotlib.rcParams.update({'font.size':15})
-    matplotlib.rcParams.update({'font.family':'sans-serif'})
+    matplotlib.rcParams.update({'font.size': 15})
+    matplotlib.rcParams.update({'font.family': 'sans-serif'})
     matplotlib.rcParams['text.usetex'] = True
 
     # Prep output dir (if specified)
@@ -301,7 +319,7 @@ if __name__ == "__main__":
     # Args
     parser.add_argument('--plot_output_dir', type=str, help='Plots output dir.')
     parser.add_argument('--evaluate_dir', type=str, help='Dir containing result files that you want to evaluate')
-    parser.add_argument('--labels', type=str, default = '/Users/lander14/Desktop/TAO_val_annot/annotations/validation.json',
+    parser.add_argument('--labels', type=str, default='',
                         help='Specify dir containing the labels')
     # parser.add_argument('--labels', type=str, default='oxford_labels',
     #                     help='Specify dir containing the labels')
