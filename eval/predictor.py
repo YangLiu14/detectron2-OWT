@@ -34,6 +34,7 @@ class VisualizationDemo(object):
         else:
             self.predictor = DefaultPredictor(cfg)
 
+
     def run_on_image(self, image):
         """
         Args:

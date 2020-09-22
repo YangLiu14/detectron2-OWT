@@ -31,6 +31,15 @@ python gen_tao_proposals.py --config-file ../configs/COCO-InstanceSegmentation/m
                          --json /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/json/ \
                          --opts MODEL.WEIGHTS /storage/slurm/liuyang/model_weights/model_final_2d9806.pkl
 
+
+# Experiment with model inference
+python gen_tao_proposals.py --config-file ../configs/COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml \
+                         --input /storage/slurm/liuyang/data/TAO/TAO_VAL/val/ \
+                         --json /storage/slurm/liuyang/tmp/json/ \
+                         --opts MODEL.WEIGHTS /storage/slurm/liuyang/model_weights/model_final_2d9806.pkl
+
+# 10 FPS  vs  1.1s/image --> maybe it's visualizing something?
+
 # TAO_VAL evaluation
 python eval_single_image_proposals.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/plot_output/ \
                                       --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \

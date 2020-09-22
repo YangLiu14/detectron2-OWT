@@ -125,7 +125,6 @@ if __name__ == "__main__":
                 # seq.sort()
                 # seq = seq[:100]
 
-
                 json_outdir = os.path.join(args.json, video_src, video_name)
                 # json_outdir = args.json + video_name
                 if not os.path.exists(json_outdir):
@@ -133,11 +132,19 @@ if __name__ == "__main__":
 
                 from eval_utils import store_TAOjson
                 for path in tqdm.tqdm(seq, disable=not args.output):
+                    start_all = time.time()
                     # use PIL, to be consistent with evaluation
                     img = read_image(path, format="BGR")
-                    predictions, visualized_output = demo.run_on_image(img)
+                    # predictions, visualized_output = demo.run_on_image(img)
+                    start_pred = time.time()
+                    predictions = demo.predictor(img)
+                    end_pred = time.time()
                     valid_classes = [i for i in range(81)]
                     store_TAOjson(predictions, path, valid_classes, json_outdir)
+
+                    print("Inference time: {}".format(end_pred - start_pred))
+                    print("All time: {}".format(time.time() - start_all))
+
 
                     # if args.output:
                     #     if not os.path.exists(args.output + "/" + video_name):
