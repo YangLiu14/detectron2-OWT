@@ -135,6 +135,7 @@ def store_TAOjson(predictions, input_img_path: str, valid_classes: List[int], js
             proposal['category_id'] = pred_classes[i].cpu().numpy().tolist()
             proposal['bbox'] = predictions['instances'].pred_boxes[i].tensor.cpu().numpy().tolist()[0]
             proposal['score'] = predictions['instances'].scores[i].cpu().numpy().tolist()
+            proposal['bg_scores'] = predictions['instances'].bg_scores[i].cpu().numpy().tolist()
             output.append(proposal)
 
     with open(json_outpath, 'w') as fout:

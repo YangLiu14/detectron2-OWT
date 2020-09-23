@@ -74,6 +74,11 @@ def get_parser():
         "--json",
         help="A file or directory to save output proposals as json files. "
     )
+    parser.add_argument(
+        "--video_src_name",
+        help="Specify the video_src_name (the name of the dataset) that you want to process. "
+             "Otherwise, process every folder in the given root directory.",
+    )
 
     parser.add_argument(
         "--confidence-threshold",
@@ -111,6 +116,9 @@ if __name__ == "__main__":
         print("Model weights", cfg.MODEL.WEIGHTS)
         # video_names = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(args.input[0], '*'))) if fn.split('/')[-1][0] == 'b']
         video_src_names = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(args.input[0], '*')))]
+        if args.video_src_name:  #only process that one video src
+            video_src_names = [args.video_src_name]
+        print("Processing the following dataset: {}".format(video_src_names))
 
         for video_src in video_src_names:
             video_folder_paths = glob.glob(os.path.join(args.input[0], video_src, '*'))
@@ -131,19 +139,19 @@ if __name__ == "__main__":
                     os.makedirs(json_outdir)
 
                 from eval_utils import store_TAOjson
-                for path in tqdm.tqdm(seq, disable=not args.output):
+                for path in tqdm.tqdm(seq):
                     start_all = time.time()
                     # use PIL, to be consistent with evaluation
                     img = read_image(path, format="BGR")
                     # predictions, visualized_output = demo.run_on_image(img)
-                    start_pred = time.time()
+                    # start_pred = time.time()
                     predictions = demo.predictor(img)
-                    end_pred = time.time()
+                    # end_pred = time.time()
                     valid_classes = [i for i in range(81)]
                     store_TAOjson(predictions, path, valid_classes, json_outdir)
 
-                    print("Inference time: {}".format(end_pred - start_pred))
-                    print("All time: {}".format(time.time() - start_all))
+                    # print("Inference time: {}".format(end_pred - start_pred))
+                    # print("All time: {}".format(time.time() - start_all))
 
 
                     # if args.output:
