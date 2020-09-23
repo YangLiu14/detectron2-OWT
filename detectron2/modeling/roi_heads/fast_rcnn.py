@@ -97,7 +97,9 @@ def fast_rcnn_inference_single_image(
         boxes = boxes[valid_mask]
         scores = scores[valid_mask]
 
+    bg_scores = scores[:, -1]  # Yang's addition
     scores = scores[:, :-1]
+    num_classes = scores.shape[1] # Yang's addition
     num_bbox_reg_classes = boxes.shape[1] // 4
     # Convert to Boxes to use the `clip` function ...
     boxes = Boxes(boxes.reshape(-1, 4))
@@ -121,10 +123,15 @@ def fast_rcnn_inference_single_image(
     if topk_per_image >= 0:
         keep = keep[:topk_per_image]
     boxes, scores, filter_inds = boxes[keep], scores[keep], filter_inds[keep]
+    # Yang: Find out which row are keeped in the original scores tensor (1000, 80+1),
+    # and select the corresponding bg_scores
+    keep_row = torch.div(keep, num_classes)
+    bg_scores = bg_scores[keep_row]
 
     result = Instances(image_shape)
     result.pred_boxes = Boxes(boxes)
     result.scores = scores
+    result.bg_scores = bg_scores  # Yang's addition
     result.pred_classes = filter_inds[:, 1]
     return result, filter_inds[:, 0]
 
