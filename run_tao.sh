@@ -39,9 +39,14 @@ python gen_tao_proposals.py --config-file ../configs/COCO-InstanceSegmentation/m
 # Experiment with model inference
 python gen_tao_proposals.py --config-file ../configs/Misc/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml \
                          --input /storage/slurm/liuyang/data/TAO/TAO_VAL/val/ \
-                         --json /storage/slurm/liuyang/tmp/json/ \
-                         --video_src_name ArgoVerse
-                         --opts MODEL.WEIGHTS /storage/slurm/liuyang/model_weights/model_final_2d9806.pkl
+                         --json /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSon/json/ \
+                         --video_src_name ArgoVerse \
+                         --opts MODEL.WEIGHTS /storage/slurm/liuyang/model_weights/detectron2/Panoptic_FPN_R101/model_final_be35db.pkl
+
+python gen_tao_proposals.py --config-file ../configs/Misc/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml \
+                         --input /storage/slurm/liuyang/data/TAO/TAO_VAL/val/ \
+                         --json /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSon/json/ \
+                         --opts MODEL.WEIGHTS /storage/slurm/liuyang/model_weights/detectron2/Panoptic_FPN_R101/model_final_be35db.pkl
 
 python gen_tao_proposals.py --config-file ../configs/COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml \
                          --input /storage/slurm/liuyang/data/TAO/TAO_VAL/val/ \
