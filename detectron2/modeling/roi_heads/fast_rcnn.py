@@ -7,7 +7,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from detectron2.config import configurable
-from detectron2.layers import Linear, ShapeSpec, batched_nms, cat, nonzero_tuple
+from detectron2.layers import Linear, ShapeSpec, batched_nms, batch_nms_based_on_BackgroundScores, cat, nonzero_tuple
 from detectron2.modeling.box_regression import Box2BoxTransform
 from detectron2.structures import Boxes, Instances
 from detectron2.utils.events import get_event_storage
@@ -70,7 +70,7 @@ def fast_rcnn_inference(boxes, scores, image_shapes, score_thresh, nms_thresh, t
             the corresponding boxes/scores index in [0, Ri) from the input, for image i.
     """
     result_per_image = [
-        fast_rcnn_inference_single_image(
+        fast_rcnn_inference_single_image_based_on_BackgroundScore(  # Yang's modification
             boxes_per_image, scores_per_image, image_shape, score_thresh, nms_thresh, topk_per_image
         )
         for scores_per_image, boxes_per_image, image_shape in zip(scores, boxes, image_shapes)
@@ -120,6 +120,83 @@ def fast_rcnn_inference_single_image(
 
     # Apply per-class NMS
     keep = batched_nms(boxes, scores, filter_inds[:, 1], nms_thresh)
+    if topk_per_image >= 0:
+        keep = keep[:topk_per_image]
+    boxes, scores, filter_inds = boxes[keep], scores[keep], filter_inds[keep]
+    # Yang: Find out which row are keeped in the original scores tensor (1000, 80+1),
+    # and select the corresponding bg_scores
+    keep_row = torch.div(keep, num_classes)
+    bg_scores = bg_scores[keep_row]
+
+    result = Instances(image_shape)
+    result.pred_boxes = Boxes(boxes)
+    result.scores = scores
+    result.bg_scores = bg_scores  # Yang's addition
+    result.pred_classes = filter_inds[:, 1]
+    return result, filter_inds[:, 0]
+
+
+def fast_rcnn_inference_single_image_based_on_BackgroundScore(
+    boxes, scores, image_shape, score_thresh, nms_thresh, topk_per_image
+):
+    """
+    Single-image inference. Return bounding-box detection results by thresholding
+    on scores and applying non-maximum suppression (NMS).
+
+    Args:
+        Same as `fast_rcnn_inference`, but with boxes, scores, and image shapes
+        per image.
+
+    Returns:
+        Same as `fast_rcnn_inference`, but for only one image.
+    """
+    valid_mask = torch.isfinite(boxes).all(dim=1) & torch.isfinite(scores).all(dim=1)
+    if not valid_mask.all():
+        boxes = boxes[valid_mask]
+        scores = scores[valid_mask]
+
+    bg_scores = scores[:, -1]  # Yang's addition
+    scores = scores[:, :-1]
+    num_classes = scores.shape[1]  # Yang's addition
+    num_bbox_reg_classes = boxes.shape[1] // 4
+    # Convert to Boxes to use the `clip` function ...
+    boxes = Boxes(boxes.reshape(-1, 4))
+    boxes.clip(image_shape)
+    boxes = boxes.tensor.view(-1, num_bbox_reg_classes, 4)  # R x C x 4
+
+    # =================================================
+    # Original filter_mask
+    # =================================================
+    # # Filter results based on detection scores
+    # filter_mask = scores > score_thresh  # R x K
+    # # R' x 2. First column contains indices of the R predictions;
+    # # Second column contains indices of classes.
+    # filter_inds = filter_mask.nonzero()  # torch1.5
+    # # filter_inds = torch.nonzero(filter_mask, as_tuple=False)  # torch1.6
+    # if num_bbox_reg_classes == 1:
+    #     boxes = boxes[filter_inds[:, 0], 0]
+    # else:
+    #     boxes = boxes[filter_mask]
+    # scores = scores[filter_mask]
+    # =================================================
+    # End of Original filter_mask
+    # =================================================
+    # =================================================
+    # Replacement filter_mask (Yang)
+    # =================================================
+    filter_mask = (1 - bg_scores) > score_thresh  # R x 1
+    filter_inds = filter_mask.nonzero()
+    if num_bbox_reg_classes == 1:
+        boxes = boxes[filter_inds[:, 0], 0]
+    else:
+        boxes = boxes[filter_mask]
+    bg_scores = bg_scores[filter_mask]
+    # =================================================
+    # End of Replacement filter_mask
+    # =================================================
+
+    # Apply per-class NMS
+    keep = batch_nms_based_on_BackgroundScores(boxes, bg_scores, filter_inds, nms_thresh)
     if topk_per_image >= 0:
         keep = keep[:topk_per_image]
     boxes, scores, filter_inds = boxes[keep], scores[keep], filter_inds[keep]

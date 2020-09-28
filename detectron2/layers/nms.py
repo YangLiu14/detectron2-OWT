@@ -7,6 +7,25 @@ from torchvision.ops import boxes as box_ops
 from torchvision.ops import nms  # BC-compat
 
 
+def batch_nms_based_on_BackgroundScores(
+        boxes: torch.Tensor, bg_scores: torch.Tensor, idxs: torch.Tensor, iou_threshold: float
+):
+    """
+    Same as batched_nms, but using (1 - background_scores) as filter criterion
+    """
+    assert boxes.shape[-1] == 4
+
+    # TODO: finish the modification of the following section
+    result_mask = bg_scores.new_zeros(bg_scores.size(), dtype=torch.bool)
+    for id in torch.jit.annotate(List[int], torch.unique(idxs).cpu().tolist()):
+        mask = (idxs == id).nonzero().view(-1)
+        keep = nms(boxes[mask], scores[mask], iou_threshold)
+        result_mask[mask[keep]] = True
+    keep = result_mask.nonzero().view(-1)
+    keep = keep[scores[keep].argsort(descending=True)]
+    return keep
+
+
 def batched_nms(
     boxes: torch.Tensor, scores: torch.Tensor, idxs: torch.Tensor, iou_threshold: float
 ):
