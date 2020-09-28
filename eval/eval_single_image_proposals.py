@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 
 import glob
@@ -15,15 +14,16 @@ import os
 
 IOU_THRESHOLD = 0.5
 
-known_classes = ['airplane', 'apple', 'backpack', 'book_bag', 'duffel_bag', 'ball', 'banana', 'baseball_bat', 'baseball_glove',
-                 'bear', 'bed', 'beef', 'bench', 'bicycle', 'bird', 'boat', 'book', 'bottle', 'bowl', 'broccoli', 'bus',
-                 'cake', 'car', 'carrot', 'cat', 'cellular_telephone', 'chair', 'clock', 'computer_keyboard', 'cup',
-                 'dining_table', 'dog', 'doughnut', 'electric_refrigerator', 'elephant', 'fireplug', 'fork', 'frank',
-                 'frisbee', 'giraffe', 'hand_blower', 'horse', 'kite', 'knife', 'laptop', 'microwave', 'motorcycle',
-                 'mouse', 'necktie', 'orange', 'oven', 'parking_meter', 'person', 'pizza', 'pot', 'remote_control',
-                 'sandwich', 'scissors', 'sheep', 'sink', 'skateboard', 'ski', 'snowboard', 'sofa', 'spoon', 'stop_sign',
-                 'surfboard', 'teddy', 'television_receiver', 'tennis_racket', 'toaster', 'toilet', 'toothbrush',
-                 'traffic_light', 'train', 'truck', 'umbrella', 'vase', 'wineglass', 'zebra']
+all_ids = set([i for i in range(1, 1231)])
+
+# Category IDs in TAO that are known (appeared in COCO)
+with open("../datasets/coco_id2tao_id.json") as f:
+    coco_id2tao_id = json.load(f)
+known_tao_ids = set([v for k, v in coco_id2tao_id.items()])
+
+# Category IDs in TAO that are unknown (comparing to COCO)
+unknown_tao_ids = all_ids.difference(known_tao_ids)
+
 
 def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_labels',
             dist_thresh=1000.0, area_thresh=10*10):
@@ -47,6 +47,9 @@ def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_la
         imgID2fname[img['id']] = img['file_name']
 
     for ann in annotations:
+        if ann["category_id"] in exclude_classes:
+            continue
+
         img_id = ann['image_id']
         fname = imgID2fname[img_id]
         fname = fname.replace("jpg", "json")
@@ -114,11 +117,16 @@ def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: 1 - 
             continue
 
         # Load proposals
+        # try:
+        #     props = json.load(open(prop_filename))
+        # except ValueError:
+        #     print("Error loading json: %s" % prop_filename)
+        #     quit()
         try:
             props = json.load(open(prop_filename))
-        except ValueError:
-            print ("Error loading json: %s"%prop_filename)
-            quit()
+        except:
+            print(prop_filename, "not found")
+            continue
 
         if props is None:
             continue
@@ -157,11 +165,16 @@ def calculate_ious(bboxes1, bboxes2):
 
 
 def evaluate_proposals(gt, props, n_max_proposals=1000):
-    all_ious = [] # ious for all frames
+    all_ious = []  # ious for all frames
     for img, img_gt in gt.items():
         if len(img_gt) == 0:
             continue
-        img_props = props[img]
+
+        try:
+            img_props = props[img]
+        except:
+            continue
+
         gt_bboxes = np.array(img_gt)
         prop_bboxes = np.array(img_props)
         ious = calculate_ious(gt_bboxes, prop_bboxes)
@@ -259,7 +272,8 @@ def evaluate_all_folders_oxford(gt, plot_title, user_specified_result_dir=None, 
         dirs = os.listdir(user_specified_result_dir)
         dirs.sort()
 
-        ignore_dirs = ["BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA"]
+        # ignore_dirs = ["BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA"]
+        ignore_dirs = ["Charades", "LaSOT", "YFCC100M", "HACS", "AVA"]
         for mydir in dirs:
             if mydir[0] == '.':
                 continue  # Filter out `.DS_Store` and `._.DS_Store`
@@ -283,9 +297,10 @@ def eval_recall_oxford(output_dir):
 
     # +++ Most common categories +++
     # print("evaluating car, bike, person, bus:")
-    print("evaluating coco 79 classes without hot_dog:")
-    exclude_classes = ("other",)
-    ignored_seq = ("BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA")
+    print("evaluating coco 78 classes without hot_dog and oven:")
+    exclude_classes = tuple(unknown_tao_ids)
+    # ignored_seq = ("BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA")
+    ignored_seq = ("Charades", "LaSOT", "YFCC100M", "HACS", "AVA")
     gt, n_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
     # gt, n_gt_boxes = load_gt_oxford(exclude_classes, prefix_dir_name=FLAGS.labels)
 
@@ -295,17 +310,10 @@ def eval_recall_oxford(output_dir):
 
     # +++ "other" categories +++
     print("evaluating others:")
-    # TODO: Load coco classes
-    coco_cls_fpath = "/home/kloping/git-repos/detectron2-TAO/datasets/coco/coco_classes.json"
-    with open(coco_cls_fpath, 'r') as f:
-        coco_dict = json.load(f)
-    coco_classes = [cname for k, cname in coco_dict.items()]
-    # END of TODO
-
-    exclude_classes = ("car", "bike", "person", "bus")
+    exclude_classes = tuple(known_tao_ids)
     gt, n_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
 
-    evaluate_all_folders_oxford(gt, "others (" + str(n_gt_boxes) + " bounding boxes)",
+    evaluate_all_folders_oxford(gt, "COCO unknown classes (" + str(n_gt_boxes) + " bounding boxes)",
                                 output_dir=output_dir,
                                 user_specified_result_dir=FLAGS.evaluate_dir)
 

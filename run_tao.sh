@@ -65,5 +65,5 @@ python gen_tao_proposals.py --config-file ../configs/COCO-InstanceSegmentation/m
 # TAO_VAL evaluation
 python eval_single_image_proposals.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/plot_output/ \
                                       --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
-                                      --evaluate_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/json/ \
+                                      --evaluate_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff/json/ \
                                       --do_not_timestamp

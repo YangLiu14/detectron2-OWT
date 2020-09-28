@@ -27,6 +27,10 @@ def coco_id2tao_id():
         TAO_categories.append(c['synset'])
         tao_id2cls[c['id']] = [c['synset'], c['name']]
 
+
+    import pdb; pdb.set_trace()
+
+
     synset_cls = [v['synset'] for k, v in coco2synset.items()]
     # coco_ids = [v['coco_cat_id'] for k, v in coco2synset.items()]
     coco_names = [k for k, v in coco2synset.items()]
@@ -54,6 +58,9 @@ def coco_id2tao_id():
     #     coco_name = coco_classes[coco_id]
     #     tao_name = tao_id2cls[tao_id]
     #     print(str(coco_id), coco_name, tao_name)
+
+    with open('coco_id2tao_id.json', 'w') as f:
+        json.dump(coco2tao, f)
 
     return coco2tao
 
