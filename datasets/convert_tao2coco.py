@@ -10,6 +10,11 @@ def coco_id2tao_id():
     with open("coco/coco2synset.json") as f:
         coco2synset = json.load(f)
 
+    with open('coco/coco_classes.json', 'r') as f:
+        coco_dict = json.load(f)
+    coco_classes = [cname for k, cname in coco_dict.items()]
+    coco_classes = coco_classes[1:]  # The first one is background class
+
     # list all the categories of TAO (in the style of synset)
     TAO_categories = list()
     TAO_ids = list()
@@ -21,6 +26,13 @@ def coco_id2tao_id():
 
     synset_cls = [v['synset'] for k, v in coco2synset.items()]
     coco_ids = [v['coco_cat_id'] for k, v in coco2synset.items()]
+    coco_names = [k for k, v in coco2synset.items()]
+
+    # The coco_id in synset spans to 90, which includes some conventionally ignored class ids
+    # So we need to convert the ids to fit the 1~80 coco ids
+    coco_ids = list()
+    for cn in coco_names:
+        coco_ids.append(coco_classes.index(cn))
 
     coco2tao = dict()
     coco_leftout = list()
@@ -33,6 +45,10 @@ def coco_id2tao_id():
 
     print("The following synset categories are left out")
     print(coco_leftout)
+
+
+    # TODO:Check coco2tao correctness
+    
 
     return coco2tao
 
