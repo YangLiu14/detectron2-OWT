@@ -15,6 +15,16 @@ import os
 
 IOU_THRESHOLD = 0.5
 
+known_classes = ['airplane', 'apple', 'backpack', 'book_bag', 'duffel_bag', 'ball', 'banana', 'baseball_bat', 'baseball_glove',
+                 'bear', 'bed', 'beef', 'bench', 'bicycle', 'bird', 'boat', 'book', 'bottle', 'bowl', 'broccoli', 'bus',
+                 'cake', 'car', 'carrot', 'cat', 'cellular_telephone', 'chair', 'clock', 'computer_keyboard', 'cup',
+                 'dining_table', 'dog', 'doughnut', 'electric_refrigerator', 'elephant', 'fireplug', 'fork', 'frank',
+                 'frisbee', 'giraffe', 'hand_blower', 'horse', 'kite', 'knife', 'laptop', 'microwave', 'motorcycle',
+                 'mouse', 'necktie', 'orange', 'oven', 'parking_meter', 'person', 'pizza', 'pot', 'remote_control',
+                 'sandwich', 'scissors', 'sheep', 'sink', 'skateboard', 'ski', 'snowboard', 'sofa', 'spoon', 'stop_sign',
+                 'surfboard', 'teddy', 'television_receiver', 'tennis_racket', 'toaster', 'toilet', 'toothbrush',
+                 'traffic_light', 'train', 'truck', 'umbrella', 'vase', 'wineglass', 'zebra']
+
 def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_labels',
             dist_thresh=1000.0, area_thresh=10*10):
 
@@ -47,7 +57,6 @@ def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_la
             continue
 
         xc, yc, w, h = ann['bbox']
-        # TODO: should I convert the bbox to [x1, y1, x2, y2] ?
         # convert [xc, yc, w, h] to [x1, y1, x2, y2]
         box = (xc, yc, w, h)
         bbox = [box[0], box[1], box[0] + box[2], box[1] + box[3]]
@@ -93,7 +102,8 @@ def load_gt_categories(exclude_classes=(), ignored_sequences=(), prefix_dir_name
     return gt_cat, n_boxes, gt_cat_map
 
 
-def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
+# def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
+def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
     proposals = {}
     for filename in gt.keys():
         prop_filename = os.path.join(folder, "/".join(filename.split("/")[-2:]))
@@ -170,7 +180,8 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
     return iou_curve
 
 
-def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
+# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
+def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
     props = load_proposals(folder, gt, ignored_sequences=ignored_sequences, score_fnc=score_fnc)
 
     iou_curve = evaluate_proposals(gt, props)
@@ -271,18 +282,26 @@ def evaluate_all_folders_oxford(gt, plot_title, user_specified_result_dir=None, 
 def eval_recall_oxford(output_dir):
 
     # +++ Most common categories +++
-    print("evaluating car, bike, person, bus:")
+    # print("evaluating car, bike, person, bus:")
+    print("evaluating coco 79 classes without hot_dog:")
     exclude_classes = ("other",)
     ignored_seq = ("BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA")
     gt, n_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
     # gt, n_gt_boxes = load_gt_oxford(exclude_classes, prefix_dir_name=FLAGS.labels)
 
-    evaluate_all_folders_oxford(gt, "car, bike, person, and bus (" + str(n_gt_boxes) + " bounding boxes)",
+    evaluate_all_folders_oxford(gt, "COCO known classes (" + str(n_gt_boxes) + " bounding boxes)",
                                 output_dir=output_dir,
                                 user_specified_result_dir=FLAGS.evaluate_dir)
 
     # +++ "other" categories +++
     print("evaluating others:")
+    # TODO: Load coco classes
+    coco_cls_fpath = "/home/kloping/git-repos/detectron2-TAO/datasets/coco/coco_classes.json"
+    with open(coco_cls_fpath, 'r') as f:
+        coco_dict = json.load(f)
+    coco_classes = [cname for k, cname in coco_dict.items()]
+    # END of TODO
+
     exclude_classes = ("car", "bike", "person", "bus")
     gt, n_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
 
