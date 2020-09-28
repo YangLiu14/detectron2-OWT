@@ -49,11 +49,11 @@ def coco_id2tao_id():
     print("The following synset categories are left out")
     print(coco_leftout)
 
-    # Check coco2tao correctness
-    for coco_id, tao_id in coco2tao.items():
-        coco_name = coco_classes[coco_id]
-        tao_name = tao_id2cls[tao_id]
-        print(str(coco_id), coco_name, tao_name)
+    # # Check coco2tao correctness
+    # for coco_id, tao_id in coco2tao.items():
+    #     coco_name = coco_classes[coco_id]
+    #     tao_name = tao_id2cls[tao_id]
+    #     print(str(coco_id), coco_name, tao_name)
 
     return coco2tao
 
