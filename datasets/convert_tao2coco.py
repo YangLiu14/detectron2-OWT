@@ -1,9 +1,11 @@
 import json
+import sys
 
 
 def coco_id2tao_id():
     # Loading json files
-    val_annot_path = "/home/kloping/OpenSet_MOT/data/TAO/annotations/validation.json"
+    # val_annot_path = "/home/kloping/OpenSet_MOT/data/TAO/annotations/validation.json"
+    val_annot_path = "/storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json"
     with open(val_annot_path, 'r') as f:
         val_annot_dict = json.load(f)
 
@@ -18,14 +20,15 @@ def coco_id2tao_id():
     # list all the categories of TAO (in the style of synset)
     TAO_categories = list()
     TAO_ids = list()
+    tao_id2cls = dict()
 
     for c in val_annot_dict['categories']:
-        id = c['id']
         TAO_ids.append(c['id'])
         TAO_categories.append(c['synset'])
+        tao_id2cls[c['id']] = [c['synset'], c['name']]
 
     synset_cls = [v['synset'] for k, v in coco2synset.items()]
-    coco_ids = [v['coco_cat_id'] for k, v in coco2synset.items()]
+    # coco_ids = [v['coco_cat_id'] for k, v in coco2synset.items()]
     coco_names = [k for k, v in coco2synset.items()]
 
     # The coco_id in synset spans to 90, which includes some conventionally ignored class ids
@@ -46,13 +49,13 @@ def coco_id2tao_id():
     print("The following synset categories are left out")
     print(coco_leftout)
 
-
-    # TODO:Check coco2tao correctness
-    
+    # Check coco2tao correctness
+    for coco_id, tao_id in coco2tao.items():
+        coco_name = coco_classes[coco_id]
+        tao_name = tao_id2cls[tao_id]
+        print(str(coco_id), coco_name, tao_name)
 
     return coco2tao
-
-
 
 
 def check_coco_tao_intersection(tao_category_dict, split='TRAIN'):
@@ -148,20 +151,21 @@ def check_train_val_diff(train_dict, val_dict):
 
 if __name__ == "__main__":
     coco_id2tao_id()
+    sys.exit()
 
     # The followings are for test
-    train_annot_path = "/home/kloping/OpenSet_MOT/data/TAO/annotations/train.json"
-    with open(train_annot_path, 'r') as f:
-        train_annot_dict = json.load(f)
+    # train_annot_path = "/home/kloping/OpenSet_MOT/data/TAO/annotations/train.json"
+    # with open(train_annot_path, 'r') as f:
+    #     train_annot_dict = json.load(f)
 
     val_annot_path = "/home/kloping/OpenSet_MOT/data/TAO/annotations/validation.json"
     with open(val_annot_path, 'r') as f:
         val_annot_dict = json.load(f)
 
-    test = (train_annot_dict == val_annot_dict)
+    # test = (train_annot_dict == val_annot_dict)
 
     # TEST 1: Check how many instances of coco already exists in TAO VAL dataset
-    check_coco_tao_intersection(train_annot_dict['categories'], split='TRAIN')
+    # check_coco_tao_intersection(train_annot_dict['categories'], split='TRAIN')
     check_coco_tao_intersection(val_annot_dict['categories'], split='VAL')
 
     # TEST 2: Check how many classes are covered in TRAIN and how many covered in VAL
