@@ -39,13 +39,14 @@ wheels/
 # editor settings
 .idea
 .vscode
+*._.DS_Store
+*.DS_Store
 
 # project dirs
 /detectron2/model_zoo/configs
 
 /datasets/tao
-/datasets/coco/annotations
-/datasets/coco/val2017
+/datasets/coco
 
 /projects/*/datasets
 /models
