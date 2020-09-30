@@ -70,7 +70,7 @@ def fast_rcnn_inference(boxes, scores, image_shapes, score_thresh, nms_thresh, t
             the corresponding boxes/scores index in [0, Ri) from the input, for image i.
     """
     result_per_image = [
-        fast_rcnn_inference_single_image_based_on_BackgroundScore(  # Yang's modification
+        fast_rcnn_inference_single_image(  # Yang's modification
             boxes_per_image, scores_per_image, image_shape, score_thresh, nms_thresh, topk_per_image
         )
         for scores_per_image, boxes_per_image, image_shape in zip(scores, boxes, image_shapes)
