@@ -167,43 +167,47 @@ def fast_rcnn_inference_single_image_based_on_BackgroundScore(
     # =================================================
     # Original filter_mask
     # =================================================
-    # # Filter results based on detection scores
-    # filter_mask = scores > score_thresh  # R x K
-    # # R' x 2. First column contains indices of the R predictions;
-    # # Second column contains indices of classes.
-    # filter_inds = filter_mask.nonzero()  # torch1.5
-    # # filter_inds = torch.nonzero(filter_mask, as_tuple=False)  # torch1.6
-    # if num_bbox_reg_classes == 1:
-    #     boxes = boxes[filter_inds[:, 0], 0]
-    # else:
-    #     boxes = boxes[filter_mask]
-    # scores = scores[filter_mask]
+    # Filter results based on detection scores
+    filter_mask = scores > score_thresh  # R x K
+    # R' x 2. First column contains indices of the R predictions;
+    # Second column contains indices of classes.
+    filter_inds = filter_mask.nonzero()  # torch1.5
+    # filter_inds = torch.nonzero(filter_mask, as_tuple=False)  # torch1.6
+    if num_bbox_reg_classes == 1:
+        boxes = boxes[filter_inds[:, 0], 0]
+    else:
+        boxes = boxes[filter_mask]
+    scores = scores[filter_mask]
     # =================================================
     # End of Original filter_mask
     # =================================================
     # =================================================
     # Replacement filter_mask (Yang)
     # =================================================
-    filter_mask = (1 - bg_scores) > score_thresh  # R x 1
-    filter_inds = filter_mask.nonzero()
-    if num_bbox_reg_classes == 1:
-        boxes = boxes[filter_inds[:, 0], 0]
-    else:
-        boxes = boxes[filter_mask]
-    bg_scores = bg_scores[filter_mask]
+    # filter_mask = (1 - bg_scores) > score_thresh  # R x 1
+    # filter_inds = filter_mask.nonzero()
+    # if num_bbox_reg_classes == 1:
+    #     boxes = boxes[filter_inds[:, 0], 0]
+    # else:
+    #     boxes = boxes[filter_mask]
+    # bg_scores = bg_scores[filter_mask]
     # =================================================
     # End of Replacement filter_mask
     # =================================================
 
     # Apply per-class NMS
-    keep = batch_nms_based_on_BackgroundScores(boxes, bg_scores, filter_inds, nms_thresh)
+    keep = batched_nms(boxes, scores, filter_inds[:, 1], nms_thresh)
+    # keep = batch_nms_based_on_BackgroundScores(boxes, bg_scores, filter_inds, nms_thresh)
     if topk_per_image >= 0:
         keep = keep[:topk_per_image]
+
     boxes, scores, filter_inds = boxes[keep], scores[keep], filter_inds[keep]
+
+    import pdb; pdb.set_trace()
     # Yang: Find out which row are keeped in the original scores tensor (1000, 80+1),
     # and select the corresponding bg_scores
-    keep_row = torch.div(keep, num_classes)
-    bg_scores = bg_scores[keep_row]
+    # keep_row = torch.div(keep, num_classes)
+    bg_scores = bg_scores[keep]
 
     result = Instances(image_shape)
     result.pred_boxes = Boxes(boxes)

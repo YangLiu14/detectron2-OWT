@@ -17,12 +17,17 @@ def batch_nms_based_on_BackgroundScores(
 
     # TODO: finish the modification of the following section
     result_mask = bg_scores.new_zeros(bg_scores.size(), dtype=torch.bool)
-    for id in torch.jit.annotate(List[int], torch.unique(idxs).cpu().tolist()):
-        mask = (idxs == id).nonzero().view(-1)
-        keep = nms(boxes[mask], scores[mask], iou_threshold)
-        result_mask[mask[keep]] = True
-    keep = result_mask.nonzero().view(-1)
-    keep = keep[scores[keep].argsort(descending=True)]
+    # for id in torch.jit.annotate(List[int], torch.unique(idxs).cpu().tolist()):
+    #     mask = (idxs == id).nonzero().view(-1)
+    #     keep = nms(boxes[mask], bg_scores[mask], iou_threshold)
+    #     result_mask[mask[keep]] = True
+
+    keep = nms(boxes, 1 - bg_scores, iou_threshold)
+    test = keep
+    result_mask[keep] = True
+    # keep = result_mask.nonzero().view(-1)
+    # keep = keep[bg_scores[keep].argsort(descending=True)]
+    keep = keep[bg_scores[keep].argsort()]
     return keep
 
 
