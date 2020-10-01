@@ -138,7 +138,7 @@ if __name__ == "__main__":
                 if not os.path.exists(json_outdir):
                     os.makedirs(json_outdir)
 
-                from eval_utils import store_TAOjson
+                from eval_utils import store_TAOjson, analyse_coco_cat
                 for path in tqdm.tqdm(seq):
                     start_all = time.time()
                     # use PIL, to be consistent with evaluation
@@ -149,6 +149,8 @@ if __name__ == "__main__":
                     # end_pred = time.time()
                     valid_classes = [i for i in range(81)]
                     store_TAOjson(predictions, path, valid_classes, json_outdir)
+                    # analyse_coco_cat(predictions, path, valid_classes, json_outdir)
+
 
                     # print("Inference time: {}".format(end_pred - start_pred))
                     # print("All time: {}".format(time.time() - start_all))

@@ -3,6 +3,7 @@ import cv2
 import json
 import numpy as np
 import os
+import sys
 import time
 import torch
 import tqdm
@@ -140,6 +141,33 @@ def store_TAOjson(predictions, input_img_path: str, valid_classes: List[int], js
             proposal['bg_score'] = predictions['instances'].bg_scores[i].cpu().numpy().tolist()
             proposal['embeddings'] = predictions['instances'].embeddings[i].cpu().numpy().tolist()
             output['proposals'].append(proposal)
+    # output['sem_seg'] = predictions['sem_seg'].cpu().numpy()
+
+    with open(json_outpath, 'w') as fout:
+        json.dump(output, fout)
+
+
+def analyse_coco_cat(predictions, input_img_path: str, valid_classes: List[int], json_outdir: str):
+    """
+    Anaylse the output of the network to see if there is any coco classes id greater than 80.
+    """
+
+    frame_name = input_img_path.split('/')[-1].replace('.jpg', '.json')
+    frame_name = frame_name.split('-')[-1]  # specifically for bdd-100k data
+    json_outpath = os.path.join(json_outdir, frame_name)
+    output = dict()
+    output['proposals'] = list()
+
+    pred_classes = predictions['instances'].pred_classes
+
+    for i in range(len(pred_classes)):
+        proposal = dict()
+        if pred_classes[i] in valid_classes:
+            proposal['category_id'] = pred_classes[i].cpu().numpy().tolist()
+            if proposal['category_id'] > 80:
+                print(proposal['category_id'])
+                sys.exit()
+
     # output['sem_seg'] = predictions['sem_seg'].cpu().numpy()
 
     with open(json_outpath, 'w') as fout:
