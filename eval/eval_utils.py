@@ -125,7 +125,8 @@ def store_TAOjson(predictions, input_img_path: str, valid_classes: List[int], js
     frame_name = input_img_path.split('/')[-1].replace('.jpg', '.json')
     frame_name = frame_name.split('-')[-1]  # specifically for bdd-100k data
     json_outpath = os.path.join(json_outdir, frame_name)
-    output = []
+    output = dict()
+    output['proposals'] = list()
 
     pred_classes = predictions['instances'].pred_classes
 
@@ -134,10 +135,12 @@ def store_TAOjson(predictions, input_img_path: str, valid_classes: List[int], js
         if pred_classes[i] in valid_classes:
             proposal['category_id'] = pred_classes[i].cpu().numpy().tolist()
             proposal['bbox'] = predictions['instances'].pred_boxes[i].tensor.cpu().numpy().tolist()[0]
-            proposal['score'] = predictions['instances'].scores[i].cpu().numpy().tolist()
+            proposal['instance_mask'] = predictions['instances'].pred_masks[i].cpu().numpy().tolist()
+            proposal['score'] = predictions['instances'].scores[i].cpu().numpy()
             proposal['bg_score'] = predictions['instances'].bg_scores[i].cpu().numpy().tolist()
             proposal['embeddings'] = predictions['instances'].embeddings[i].cpu().numpy().tolist()
-            output.append(proposal)
+            output['proposals'].append(proposal)
+    # output['sem_seg'] = predictions['sem_seg'].cpu().numpy()
 
     with open(json_outpath, 'w') as fout:
         json.dump(output, fout)
