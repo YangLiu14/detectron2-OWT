@@ -43,7 +43,7 @@ Naming convention:
 """
 
 
-def fast_rcnn_inference(boxes, scores, image_shapes, score_thresh, nms_thresh, topk_per_image):
+def fast_rcnn_inference(boxes, scores, features, image_shapes, score_thresh, nms_thresh, topk_per_image):
     """
     Call `fast_rcnn_inference_single_image` for all images.
 
@@ -56,6 +56,8 @@ def fast_rcnn_inference(boxes, scores, image_shapes, score_thresh, nms_thresh, t
         scores (list[Tensor]): A list of Tensors of predicted class scores for each image.
             Element i has shape (Ri, K + 1), where Ri is the number of predicted objects
             for image i. Compatible with the output of :meth:`FastRCNNOutputLayers.predict_probs`.
+        features (Tensor): Has the shape (Ri, 1024). The features is extracted after the `box_head`,
+            and should be served as an appearance embedding for each proposal. (Added by Yang).
         image_shapes (list[tuple]): A list of (width, height) tuples for each image in the batch.
         score_thresh (float): Only return detections with a confidence score exceeding this
             threshold.
@@ -71,7 +73,7 @@ def fast_rcnn_inference(boxes, scores, image_shapes, score_thresh, nms_thresh, t
     """
     result_per_image = [
         fast_rcnn_inference_single_image(  # Yang's modification
-            boxes_per_image, scores_per_image, image_shape, score_thresh, nms_thresh, topk_per_image
+            boxes_per_image, scores_per_image, features, image_shape, score_thresh, nms_thresh, topk_per_image
         )
         for scores_per_image, boxes_per_image, image_shape in zip(scores, boxes, image_shapes)
     ]
@@ -79,7 +81,7 @@ def fast_rcnn_inference(boxes, scores, image_shapes, score_thresh, nms_thresh, t
 
 
 def fast_rcnn_inference_single_image(
-    boxes, scores, image_shape, score_thresh, nms_thresh, topk_per_image
+    boxes, scores, features, image_shape, score_thresh, nms_thresh, topk_per_image
 ):
     """
     Single-image inference. Return bounding-box detection results by thresholding
@@ -127,11 +129,13 @@ def fast_rcnn_inference_single_image(
     # and select the corresponding bg_scores
     keep_row = torch.div(keep, num_classes)
     bg_scores = bg_scores[keep_row]
+    features = features[keep_row]
 
     result = Instances(image_shape)
     result.pred_boxes = Boxes(boxes)
     result.scores = scores
     result.bg_scores = bg_scores  # Yang's addition
+    result.embeddings = features  # Yang's addition
     result.pred_classes = filter_inds[:, 1]
     return result, filter_inds[:, 0]
 

@@ -164,6 +164,7 @@ class CascadeROIHeads(StandardROIHeads):
         head_outputs = []  # (predictor, predictions, proposals)
         prev_pred_boxes = None
         image_sizes = [x.image_size for x in proposals]
+        box_features_list = list()  # Yang's modification
         for k in range(self.num_cascade_stages):
             if k > 0:
                 # The output boxes of the previous stage are used to create the input
@@ -171,7 +172,9 @@ class CascadeROIHeads(StandardROIHeads):
                 proposals = self._create_proposals_from_boxes(prev_pred_boxes, image_sizes)
                 if self.training:
                     proposals = self._match_and_label_boxes(proposals, k, targets)
-            predictions = self._run_stage(features, proposals, k)
+            # predictions = self._run_stage(features, proposals, k)
+            predictions, box_features = self._run_stage(features, proposals, k)  # Yang's modification
+            box_features_list.append(box_features)  # Yang's modification
             prev_pred_boxes = self.box_predictor[k].predict_boxes(predictions, proposals)
             head_outputs.append((self.box_predictor[k], predictions, proposals))
 
@@ -195,14 +198,21 @@ class CascadeROIHeads(StandardROIHeads):
             # Use the boxes of the last head
             predictor, predictions, proposals = head_outputs[-1]
             boxes = predictor.predict_boxes(predictions, proposals)
+            # ==== Yang's addition ====
+            # Combine the box_features(1000, 1024) and output
+            box_features_concat = torch.cat(box_features_list)
+            out_features = box_features_list[-1]  # TODO: try some different ways for the features
+            # ==== End of Yang's addition ====
             pred_instances, _ = fast_rcnn_inference(
                 boxes,
                 scores,
+                out_features,
                 image_sizes,
                 predictor.test_score_thresh,
                 predictor.test_nms_thresh,
                 predictor.test_topk_per_image,
             )
+
             return pred_instances
 
     @torch.no_grad()
@@ -215,7 +225,7 @@ class CascadeROIHeads(StandardROIHeads):
             proposals (list[Instances]): One Instances for each image, with
                 the field "proposal_boxes".
             stage (int): the current stage
-            targets (list[Instances]): the ground truth instances
+            targets (list[Instances]): the ground   truth instances
 
         Returns:
             list[Instances]: the same proposals, but with fields "gt_classes" and "gt_boxes"
@@ -272,7 +282,8 @@ class CascadeROIHeads(StandardROIHeads):
         # but scale down the gradients on features.
         box_features = _ScaleGradient.apply(box_features, 1.0 / self.num_cascade_stages)
         box_features = self.box_head[stage](box_features)
-        return self.box_predictor[stage](box_features)
+        # return self.box_predictor[stage](box_features)
+        return self.box_predictor[stage](box_features), box_features  # Yang's modification
 
     def _create_proposals_from_boxes(self, boxes, image_sizes):
         """
