@@ -49,6 +49,7 @@ python gen_tao_proposals.py --config-file ../configs/Misc/panoptic_fpn_R_101_dco
 python gen_tao_proposals.py --config-file ../configs/Misc/noNMS/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml \
                          --input /storage/slurm/liuyang/data/TAO/TAO_VAL/val/ \
                          --json /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff/json/ \
+                         --video_src_name YFCC100M \
                          --opts MODEL.WEIGHTS /storage/slurm/liuyang/model_weights/detectron2/Panoptic_FPN_R101/model_final_be35db.pkl
 
 python gen_tao_proposals.py --config-file ../configs/Misc/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml \
@@ -56,7 +57,7 @@ python gen_tao_proposals.py --config-file ../configs/Misc/panoptic_fpn_R_101_dco
                          --json /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSon/json/ \
                          --opts MODEL.WEIGHTS /storage/slurm/liuyang/model_weights/detectron2/Panoptic_FPN_R101/model_final_be35db.pkl
 
-# Test Panoptic + class-agnostic
+# TEST Panoptic + class-agnostic
 python gen_tao_proposals.py --config-file ../configs/Misc/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml \
                          --input /storage/slurm/liuyang/data/TAO/TAO_VAL/val/ \
                          --json /storage/slurm/liuyang/tmp/json/ \
