@@ -1,3 +1,7 @@
+"""statisitcal_analysis.py: Analyse the the data distribution of the TAO dataset"""
+__author__ = "Yang Liu"
+__email__ = "lander14@outlook.com"
+
 import json
 import matplotlib.pyplot as plt
 import numpy as np
