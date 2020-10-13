@@ -26,8 +26,7 @@ unknown_tao_ids = all_ids.difference(known_tao_ids)
 
 
 def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_labels',
-            dist_thresh=1000.0, area_thresh=10*10):
-
+            dist_thresh=1000.0, area_thresh=10 * 10):
     with open(prefix_dir_name, 'r') as f:
         gt_json = json.load(f)
 
@@ -45,6 +44,15 @@ def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_la
     imgID2fname = dict()
     for img in images:
         imgID2fname[img['id']] = img['file_name']
+
+    cat_id2tracks = dict()
+    for track in tracks:
+        track_id = track['id']
+        cat_id = track['category_id']
+        if cat_id not in cat_id2tracks.keys():
+            cat_id2tracks[cat_id] = [track_id]
+        else:
+            cat_id2tracks[cat_id].append(track_id)
 
     for ann in annotations:
         if ann["category_id"] in exclude_classes:
@@ -64,17 +72,22 @@ def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_la
         box = (xc, yc, w, h)
         bbox = [box[0], box[1], box[0] + box[2], box[1] + box[3]]
         if fname in gt.keys():
-            gt[fname].append(bbox)
+            gt[fname].append({"bbox": bbox,
+                              "cat_id": ann['category_id'],
+                              "track_id": ann['category_id']
+                              })
         else:
-            gt[fname] = [bbox]
+            gt[fname] = [{"bbox": bbox,
+                          "cat_id": ann['category_id'],
+                          "track_id": ann['category_id']}]
 
     n_boxes = sum([len(x) for x in gt.values()], 0)
     print("number of gt boxes", n_boxes)
-    return gt, n_boxes
+    return gt, n_boxes, cat_id2tracks
 
 
 def load_gt_categories(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_labels'):
-    gt_jsons = glob.glob("%s/*/*.json"%prefix_dir_name)
+    gt_jsons = glob.glob("%s/*/*.json" % prefix_dir_name)
 
     gt_cat = {}
     gt_cat_map = {}
@@ -105,8 +118,8 @@ def load_gt_categories(exclude_classes=(), ignored_sequences=(), prefix_dir_name
     return gt_cat, n_boxes, gt_cat_map
 
 
-def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
-# def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
+# def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
+def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
     proposals = {}
     for filename in gt.keys():
         prop_filename = os.path.join(folder, "/".join(filename.split("/")[-2:]))
@@ -175,7 +188,8 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
         except:
             continue
 
-        gt_bboxes = np.array(img_gt)
+        gt_bboxes = np.array([box for box in img_gt['bbox']])
+        import pdb; pdb.set_trace()
         prop_bboxes = np.array(img_props)
         ious = calculate_ious(gt_bboxes, prop_bboxes)
 
@@ -184,8 +198,10 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
         ious_padded[:, :ious.shape[1]] = ious[:, :n_max_proposals]
         all_ious.append(ious_padded)
     all_ious = np.concatenate(all_ious)
+
     if IOU_THRESHOLD is None:
-        iou_curve = [0.0 if n_max == 0 else all_ious[:, :n_max].max(axis=1).mean() for n_max in range(0, n_max_proposals + 1)]
+        iou_curve = [0.0 if n_max == 0 else all_ious[:, :n_max].max(axis=1).mean() for n_max in
+                     range(0, n_max_proposals + 1)]
     else:
         assert 0 <= IOU_THRESHOLD <= 1
         iou_curve = [0.0 if n_max == 0 else (all_ious[:, :n_max].max(axis=1) > IOU_THRESHOLD).mean() for n_max in
@@ -193,8 +209,8 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
     return iou_curve
 
 
-def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
-# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
+# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
+def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
     props = load_proposals(folder, gt, ignored_sequences=ignored_sequences, score_fnc=score_fnc)
 
     iou_curve = evaluate_proposals(gt, props)
@@ -206,7 +222,7 @@ def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: pro
     iou_700 = iou_curve[700]
     end_iou = iou_curve[-1]
 
-    method_name = os.path.basename(os.path.dirname(folder+"/"))
+    method_name = os.path.basename(os.path.dirname(folder + "/"))
 
     print("%s: R50: %1.2f, R100: %1.2f, R150: %1.2f, R200: %1.2f, R700: %1.2f, R_total: %1.2f" %
           (method_name,
@@ -221,7 +237,7 @@ def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: pro
 
 
 def title_to_filename(plot_title):
-    filtered_title = re.sub("[\(\[].*?[\)\]]", "", plot_title) # Remove the content within the brackets
+    filtered_title = re.sub("[\(\[].*?[\)\]]", "", plot_title)  # Remove the content within the brackets
     filtered_title = filtered_title.replace("_", "").replace(" ", "").replace(",", "_")
     return filtered_title
 
@@ -258,7 +274,6 @@ def export_figs(export_dict, plot_title, output_dir, x_vals):
 
 
 def evaluate_all_folders_oxford(gt, plot_title, user_specified_result_dir=None, output_dir=None):
-
     print("----------- Evaluate Oxford Recall -----------")
 
     # Export dict
@@ -294,14 +309,13 @@ def evaluate_all_folders_oxford(gt, plot_title, user_specified_result_dir=None, 
 
 
 def eval_recall_oxford(output_dir):
-
     # +++ Most common categories +++
     # print("evaluating car, bike, person, bus:")
     print("evaluating coco 78 classes without hot_dog and oven:")
     exclude_classes = tuple(unknown_tao_ids)
     # ignored_seq = ("BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA")
     ignored_seq = ("HACS", "AVA")
-    gt, n_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
+    gt, n_gt_boxes, cat_id2tracks = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
     # gt, n_gt_boxes = load_gt_oxford(exclude_classes, prefix_dir_name=FLAGS.labels)
 
     evaluate_all_folders_oxford(gt, "COCO known classes (" + str(n_gt_boxes) + " bounding boxes)",
@@ -311,7 +325,7 @@ def eval_recall_oxford(output_dir):
     # +++ "other" categories +++
     print("evaluating others:")
     exclude_classes = tuple(known_tao_ids)
-    gt, n_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
+    gt, n_gt_boxes, cat_id2tracks = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
 
     evaluate_all_folders_oxford(gt, "COCO unknown classes (" + str(n_gt_boxes) + " bounding boxes)",
                                 output_dir=output_dir,
@@ -319,7 +333,6 @@ def eval_recall_oxford(output_dir):
 
 
 def main():
-
     # Matplotlib params
     matplotlib.rcParams.update({'font.size': 15})
     matplotlib.rcParams.update({'font.family': 'sans-serif'})

@@ -106,7 +106,8 @@ def load_gt_categories(exclude_classes=(), ignored_sequences=(), prefix_dir_name
 
 
 # def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
-def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
+# def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
+def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop["bg_score"]):
     proposals = {}
     for filename in gt.keys():
         prop_filename = os.path.join(folder, "/".join(filename.split("/")[-2:]))
@@ -194,7 +195,8 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
 
 
 # def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
-def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
+# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
+def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: prop["bg_score"]):
     props = load_proposals(folder, gt, ignored_sequences=ignored_sequences, score_fnc=score_fnc)
 
     iou_curve = evaluate_proposals(gt, props)
@@ -273,7 +275,7 @@ def evaluate_all_folders_oxford(gt, plot_title, user_specified_result_dir=None, 
         dirs.sort()
 
         # ignore_dirs = ["BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA"]
-        ignore_dirs = ["LaSOT", "YFCC100M", "HACS", "AVA"]
+        ignore_dirs = ["HACS", "AVA"]
         for mydir in dirs:
             if mydir[0] == '.':
                 continue  # Filter out `.DS_Store` and `._.DS_Store`
@@ -300,7 +302,7 @@ def eval_recall_oxford(output_dir):
     print("evaluating coco 78 classes without hot_dog and oven:")
     exclude_classes = tuple(unknown_tao_ids)
     # ignored_seq = ("BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA")
-    ignored_seq = ("LaSOT", "YFCC100M", "HACS", "AVA")
+    ignored_seq = ( "HACS", "AVA")
     gt, n_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
     # gt, n_gt_boxes = load_gt_oxford(exclude_classes, prefix_dir_name=FLAGS.labels)
 
