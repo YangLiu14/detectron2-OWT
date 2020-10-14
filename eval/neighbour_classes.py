@@ -9,15 +9,31 @@ __email__ = "lander14@outlook.com"
 import copy
 import glob
 import json
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
 import os
 import tqdm
 import warnings
 
+from collections import Counter
 from typing import List, Dict
 
 # ====================================================
 # Global variables
 # ====================================================
+mcolors = ['steelblue', 'yellowgreen', 'aqua', 'aquamarine', 'skyblue', 'beige', 'bisque', 'black', 'blanchedalmond',
+           'blue', 'blueviolet', 'brown', 'burlywood', 'cadetblue', 'chartreuse', 'chocolate', 'coral', 'cornflowerblue',
+           'cornsilk', 'crimson', 'cyan', 'darkblue', 'darkcyan', 'darkgoldenrod', 'darkgray', 'darkgreen', 'darkgrey',
+           'darkkhaki', 'darkmagenta', 'darkolivegreen', 'darkorange', 'darkorchid', 'darkred', 'darksalmon',
+           'darkseagreen', 'darkslateblue', 'darkslategray', 'darkslategrey', 'darkturquoise', 'darkviolet',
+           'deeppink', 'deepskyblue', 'dimgray', 'dimgrey', 'dodgerblue', 'firebrick', 'floralwhite', 'forestgreen',
+           'fuchsia', 'gainsboro', 'plum', 'gold', 'goldenrod', 'gray', 'green', 'greenyellow', 'grey',
+           'honeydew', 'hotpink', 'indianred', 'indigo', 'turquoise', 'khaki', 'lavender', 'lavenderblush', 'lawngreen',
+           'lemonchiffon', 'lightblue', 'lightcoral', 'lightcyan', 'lightgoldenrodyellow', 'lightgray', 'lightgreen',
+           'maroon']
+
+
 all_ids = set([i for i in range(1, 1231)])
 # Category IDs in TAO that are known (appeared in COCO)
 with open("../datasets/coco_id2tao_id.json") as f:
@@ -41,7 +57,10 @@ def cat_id2name(tao_annot_fpath: str, coco_fpath: str):
     for cat in category_dict:
         cat_id = cat['id']
         name = cat['name']
-        tao_id2name[cat_id] = name
+        tao_id2name[cat_id] = {"name": cat['name'],
+                               "synset": cat['synset'],
+                               "def": cat['def']
+                               }
 
     coco_id2name = dict()
     for k, v in coco_classes.items():
@@ -53,8 +72,11 @@ def cat_id2name(tao_annot_fpath: str, coco_fpath: str):
 
 
 # Get the cat_id --> cat_name mapping
-tao_id2name, coco_id2name = cat_id2name('/storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json',
+# tao_id2name, coco_id2name = cat_id2name('/storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json',
+#                                         '../datasets/coco/coco_classes.json')
+tao_id2name, coco_id2name = cat_id2name('/home/kloping/OpenSet_MOT/data/TAO/annotations/validation.json',
                                         '../datasets/coco/coco_classes.json')
+
 # ====================================================
 # ====================================================
 
@@ -179,20 +201,22 @@ def load_proposals_and_store(folder: str, data_src: List[str], exclude_classes: 
 
 
 def load_gt():
+    root_dir = "/home/kloping/OpenSet_MOT/TAO_experiment/neighbour_classes_experiment/"
     fpath1 = "gt_val.json"
-    with open(fpath1, 'r') as f1:
+    with open(root_dir+fpath1, 'r') as f1:
         gt = json.load(f1)
 
     fpath2 = "val_tao_id.json"
-    with open(fpath2, 'r') as f2:
+    with open(root_dir+fpath2, 'r') as f2:
         tao_ids = json.load(f2)
 
     return gt, tao_ids
 
 
-def load_proposals():
-    fpath = "val_proposals_tmp.json"
-    with open(fpath, 'r') as f:
+def load_proposals(src: str):
+    root_dir = "/home/kloping/OpenSet_MOT/TAO_experiment/neighbour_classes_experiment/"
+    fpath = "val_proposals_{}.json".format(src)
+    with open(root_dir+fpath, 'r') as f:
         props = json.load(f)
 
     return props
@@ -221,7 +245,7 @@ def compute_IoU(boxA, boxB):
     return iou
 
 
-def find_neighbour_classes(score_thres=0.5, iou_thres=0.5):
+def find_neighbour_classes(proposal_src: str, score_thres=0.5, iou_thres=0.5):
     """
     Compare proposals(filtered with score_thres) with GT in the same frame:
         1. Calculate IoU scores, pick those IoU scores > iou_thres
@@ -230,18 +254,24 @@ def find_neighbour_classes(score_thres=0.5, iou_thres=0.5):
     """
 
     # Load proposals and gt
-    props = load_proposals()
+    props = load_proposals(proposal_src)
     gt_dict, tao_ids = load_gt()
 
+
     coco2neighbour_ids = dict()
+    missing_frames = list()
     # Find corresponding frames
-    for fname, proposals in props.keys():
+    for fname, proposals in props.items():
         try:
             gt = gt_dict[fname]
         except:
-            warnings.warn(fname, "not found in GT")
+            print(fname, "not found in GT")
+            missing_frames.append(fname)
             continue
 
+    # with open('val_missing_frames_{}.txt'.format(proposal_src), 'w') as f:
+    #     for item in missing_frames:
+    #         f.write("%s\n" % item)
         for p in proposals:
             if p['score'] < score_thres:
                 continue
@@ -265,6 +295,136 @@ def find_neighbour_classes(score_thres=0.5, iou_thres=0.5):
     return coco2neighbour_ids
 
 
+def post_process_neighbour_classes(neighbour_json_dir: str, data_src: List[str]):
+    neighbour_dict_list = list()
+    # Load json
+    for src in data_src:
+        with open(neighbour_json_dir + '/' + 'neighbour_classes_{}.json'.format(src), 'r') as f:
+            neighbour_dict_list.append(json.load(f))
+
+    # Merge the list of dict in one Dict
+    coco_id2neighbour_id = dict()
+    for n_dict in neighbour_dict_list:
+        for k, v in n_dict.items():
+            if k in coco_id2neighbour_id.keys():
+                coco_id2neighbour_id[k] += v
+            else:
+                coco_id2neighbour_id[k] = v
+
+    # Process each k, v pair in coco_id2neighbour_id Dict
+    coco_id2neighbour_count = dict()
+    for k, v in coco_id2neighbour_id.items():
+        cnt = Counter()
+        for tao_id in v:
+            cnt[tao_id] += 1
+        coco_id2neighbour_count[k] = cnt
+
+    # Now we have: coco_id2neighbour_count -> { coco_id: {tao_id: count} }
+
+    # ==========================================
+    # Store result as txt
+    # ==========================================
+    # # Sort by coco_id
+    # output = list()
+    # for coco_id, neighbours in coco_id2neighbour_count.items():
+    #     coco_name = coco_id2name[int(coco_id)]
+    #     line = str(coco_id) + '.' + coco_name + ': '
+    #     ns = neighbours.most_common()  # sort by count
+    #     for tao_id, count in ns:
+    #         tao_name = tao_id2name[tao_id]['name']
+    #         line += str(tao_id) + '.' + tao_name + '(' + str(count) + '), '
+    #     output.append(line)
+    #
+    # output.sort(key=lambda line: int(line.split('.')[0]))
+    #
+    # # Store in txt file:
+    # with open('coco2neightbours.txt', 'w') as f:
+    #     f.write("%s\n" % "  COCO:   Neighbours")
+    #     f.write("%s\n" % "--------------------------")
+    #     for item in output:
+    #         f.write("%s\n" % item)
+    #         f.write("%s\n" % '')
+    # ============================================
+    # ============================================
+
+    # ============================================
+    # Save bar plot
+    # ============================================
+    # Sort by coco_id
+    coco_tuple = list()
+    for coco_id, neighbours in coco_id2neighbour_count.items():
+        coco_tuple.append((int(coco_id), neighbours))
+
+    coco_tuple.sort(key=lambda k: int(k[0]))
+
+    height = list()
+    bars = list()
+    color_groups = list()
+    ignore_idx = list()
+    for coco_id, neighbours in coco_tuple:
+        coco_name = coco_id2name[int(coco_id)]
+        bars.append('---------- COCO  ' + str(coco_id) + '.' + coco_name + '  ----------')
+        height.append(-1)
+        ignore_idx.append(len(height) - 1)
+        grp_start = len(height)
+        ns = neighbours.most_common()  # sort by count
+        for tao_id, count in ns:
+            tao_name = tao_id2name[tao_id]['name']
+            bars.append(str(tao_id) + '.' + tao_name)
+            height.append(count)
+        grp_end = len(height)
+        color_groups.append((grp_start, grp_end))
+
+    height.reverse()
+    bars.reverse()
+    color_groups_rev = list()
+
+    for start, end in color_groups:
+        color_groups_rev.append((len(bars) - end, len(bars) - start))
+    long_vertical_bar_plot(height, bars, color_groups_rev, ignore_idx)
+    # ============================================
+    # ============================================
+
+
+def long_vertical_bar_plot(height, bars, color_groups, ignore_idx):
+    n = len(height)
+    fig, ax = plt.subplots(figsize=(5, n // 5))  # Changing figsize depending upon data
+    y_pos = np.arange(n)
+
+    height = np.array(height)
+
+    ax.barh(y_pos, height, align='center', color='green', ecolor='black')
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels([str(x) for x in bars])
+    # ax.set_xlabel('Appeared in #tracks ({})'.format(data_src))
+    ax.set_xlabel('#instances ({})'.format(data_src))
+    ax.set_ylim(0, n)  # Manage y-axis properly
+
+    for i, v in enumerate(height):
+        ax.text(v + 3, i - 0.25, str(v), color='blue', fontweight='bold')
+
+    # Set color according to group
+    # Get colors
+    color_dict = matplotlib.colors.CSS4_COLORS
+    num_colors = len(color_groups)
+    # colors = list()
+    # for c in color_dict.keys():
+    #     colors.append(c)
+    #     num_colors -= 1
+    #     if num_colors < 0:
+    #         break
+    color_ptr = 0
+    for grp in color_groups:
+        start, end = grp
+        for i in range(start, end+1):
+            ax.get_children()[i].set_color(mcolors[color_ptr])
+        color_ptr += 1
+
+    # plt.show()
+    plt.savefig(os.path.join('neighbour_classes_barplot.png'), dpi=300, format='png',
+                bbox_inches='tight')  # use format='svg' or 'pdf' for vectorial pictures
+
+
 if __name__ == "__main__":
     # GT
     # train_annot_path = "/Users/lander14/Desktop/TAO_val_annot/annotations/train.json"
@@ -278,7 +438,19 @@ if __name__ == "__main__":
     # prop_dir = "/home/kloping/OpenSet_MOT/TAO_experiment/tmp/json"
     prop_dir = "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff/json"
 
+    # Step 1
     # load_gt_and_store(val_annot_path, [])
-    load_proposals_and_store(prop_dir, data_src, [])
+    # load_proposals_and_store(prop_dir, data_src, [])
+
+    # Step 2
+    # for src in data_src:
+    #     data = find_neighbour_classes(src)
+    #     with open('neighbour_classes_{}.json'.format(src), 'w') as fp:
+    #         json.dump(data, fp)
+
+    # Step 3
+    neighbour_json_dir = "/home/kloping/OpenSet_MOT/TAO_experiment/neighbour_classes_experiment"
+    post_process_neighbour_classes(neighbour_json_dir, data_src)
+
 
     print("DONE")
