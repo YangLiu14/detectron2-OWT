@@ -12,6 +12,16 @@ import time
 import re
 import os
 
+
+# =======================================================
+# Global variables
+# =======================================================
+"""
+known_tao_ids: set of tao ids that can be mapped exactly to coco ids.
+neighbor_classes: tao classes that are similar to coco_classes.
+unknown_tao_ids: all_tao_ids that exclude known_tao_ids and neighbor_classes..
+"""
+
 IOU_THRESHOLD = 0.5
 
 all_ids = set([i for i in range(1, 1231)])
@@ -20,9 +30,22 @@ all_ids = set([i for i in range(1, 1231)])
 with open("../datasets/coco_id2tao_id.json") as f:
     coco_id2tao_id = json.load(f)
 known_tao_ids = set([v for k, v in coco_id2tao_id.items()])
-
 # Category IDs in TAO that are unknown (comparing to COCO)
 unknown_tao_ids = all_ids.difference(known_tao_ids)
+
+# neighbor classes
+with open("../datasets/neighbor_classes.json") as f:
+    coco2neighbor_classes = json.load(f)
+# Gather tao_ids that can be categorized in the neighbor_classes
+neighbor_classes = set()
+for coco_id, neighbor_ids in coco2neighbor_classes.items():
+    neighbor_classes = neighbor_classes.union(set(neighbor_ids))
+
+# Exclude neighbor classes from unknown_tao_ids
+unknown_tao_ids = unknown_tao_ids.difference(neighbor_classes)
+
+# =======================================================
+# =======================================================
 
 
 def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_labels',
@@ -251,7 +274,7 @@ def make_plot(export_dict, plot_title, x_vals, linewidth=5):
 def export_figs(export_dict, plot_title, output_dir, x_vals):
     # Export figs, csv
     if output_dir is not None:
-        plt.savefig(os.path.join(output_dir, title_to_filename(plot_title) + ".pdf"), bbox_inches='tight')
+        plt.savefig(os.path.join(output_dir, title_to_filename(plot_title) + ".png"), bbox_inches='tight')
 
         # Save to csv
         np.savetxt(os.path.join(output_dir, 'num_objects.csv'), np.array(x_vals), delimiter=',', fmt='%d')
@@ -300,7 +323,7 @@ def eval_recall_oxford(output_dir):
     # +++ Most common categories +++
     # print("evaluating car, bike, person, bus:")
     print("evaluating coco 78 classes without hot_dog and oven:")
-    exclude_classes = tuple(unknown_tao_ids)
+    exclude_classes = tuple(unknown_tao_ids.union(neighbor_classes))
     # ignored_seq = ("BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA")
     ignored_seq = ( "HACS", "AVA")
     gt, n_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
@@ -310,9 +333,18 @@ def eval_recall_oxford(output_dir):
                                 output_dir=output_dir,
                                 user_specified_result_dir=FLAGS.evaluate_dir)
 
-    # +++ "other" categories +++
-    print("evaluating others:")
-    exclude_classes = tuple(known_tao_ids)
+    # +++ "neighbor" categories +++
+    print("evaluating neighbor classes:")
+    exclude_classes = tuple(known_tao_ids.union(unknown_tao_ids))
+    gt, n_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
+
+    evaluate_all_folders_oxford(gt, "COCO neighbor classes (" + str(n_gt_boxes) + " bounding boxes)",
+                                output_dir=output_dir,
+                                user_specified_result_dir=FLAGS.evaluate_dir)
+
+    # +++ "unknown" categories +++
+    print("evaluating unknown:")
+    exclude_classes = tuple(known_tao_ids.union(neighbor_classes))
     gt, n_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
 
     evaluate_all_folders_oxford(gt, "COCO unknown classes (" + str(n_gt_boxes) + " bounding boxes)",
