@@ -6,7 +6,6 @@ inference_test_output
 
 *.jpg
 *.png
-*.txt
 *.diff
 
 # compilation and distribution
@@ -44,10 +43,10 @@ wheels/
 # project dirs
 /detectron2/model_zoo/configs
 
-/datasets/tao
 /datasets/coco
 
 /eval/*.json
+/eval/*.txt
 
 /projects/*/datasets
 /models
