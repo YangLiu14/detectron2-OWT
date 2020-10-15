@@ -106,8 +106,8 @@ def load_gt_categories(exclude_classes=(), ignored_sequences=(), prefix_dir_name
 
 
 # def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
-# def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
-def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop["bg_score"]):
+def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
+# def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop["bg_score"]):
     proposals = {}
     for filename in gt.keys():
         prop_filename = os.path.join(folder, "/".join(filename.split("/")[-2:]))
@@ -195,8 +195,8 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
 
 
 # def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
-# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
-def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: prop["bg_score"]):
+def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
+# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: prop["bg_score"]):
     props = load_proposals(folder, gt, ignored_sequences=ignored_sequences, score_fnc=score_fnc)
 
     iou_curve = evaluate_proposals(gt, props)

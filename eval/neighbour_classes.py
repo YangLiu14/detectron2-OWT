@@ -173,7 +173,7 @@ def load_proposals_and_store(folder: str, data_src: List[str], exclude_classes: 
                         proposals.append(p)
                 props[fname] = proposals
 
-    with open('val_proposals.json', 'w') as fp:
+    with open('val_proposals_{}.json'.format(data_src[0]), 'w') as fp:
         json.dump(props, fp)
     return props
 
@@ -273,12 +273,13 @@ if __name__ == "__main__":
     val_annot_path = "/storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json"
 
     # Pred proposals
-    data_src = ['ArgoVerse', 'BDD', 'Charades', 'LaSOT', 'YFCC100M']
+    data_srces = [['ArgoVerse'], ['BDD'], ['Charades'], ['LaSOT'], ['YFCC100M']]
     # data_src = ['ArgoVerse']
     # prop_dir = "/home/kloping/OpenSet_MOT/TAO_experiment/tmp/json"
     prop_dir = "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff/json"
 
     # load_gt_and_store(val_annot_path, [])
-    load_proposals_and_store(prop_dir, data_src, [])
+    for data_src in data_srces:
+        load_proposals_and_store(prop_dir, data_src, [])
 
     print("DONE")
