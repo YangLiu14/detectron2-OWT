@@ -13,7 +13,7 @@ from ..box_regression import Box2BoxTransform
 from ..matcher import Matcher
 from ..poolers import ROIPooler
 from .box_head import build_box_head
-from .fast_rcnn import FastRCNNOutputLayers, fast_rcnn_inference
+from .fast_rcnn import FastRCNNOutputLayers, fast_rcnn_inference, fast_rcnn_inference_with_objectness
 from .roi_heads import ROI_HEADS_REGISTRY, StandardROIHeads
 
 
@@ -160,6 +160,10 @@ class CascadeROIHeads(StandardROIHeads):
                 Each has fields "proposal_boxes", and "objectness_logits",
                 "gt_classes", "gt_boxes".
         """
+        # ==== Yang's addition ====
+        softmax = torch.nn.Softmax()
+        objectness_scores = [softmax(proposals[0].objectness_logits)]
+        # ==== End of Yang's addition ====
         features = [features[f] for f in self.box_in_features]
         head_outputs = []  # (predictor, predictions, proposals)
         prev_pred_boxes = None
@@ -201,11 +205,12 @@ class CascadeROIHeads(StandardROIHeads):
             # ==== Yang's addition ====
             # Combine the box_features(1000, 1024) and output
             box_features_concat = torch.cat(box_features_list)
-            out_features = box_features_list[-1]  # TODO: try some different ways for the features
+            out_features = box_features_list[-1]  # Preliminary: only use the features in the last stage
             # ==== End of Yang's addition ====
-            pred_instances, _ = fast_rcnn_inference(
+            pred_instances, _ = fast_rcnn_inference_with_objectness(
                 boxes,
                 scores,
+                objectness_scores,
                 out_features,
                 image_sizes,
                 predictor.test_score_thresh,

@@ -12,7 +12,7 @@ from detectron2.modeling.box_regression import Box2BoxTransform
 from detectron2.structures import Boxes, Instances
 from detectron2.utils.events import get_event_storage
 
-__all__ = ["fast_rcnn_inference", "FastRCNNOutputLayers"]
+__all__ = ["fast_rcnn_inference", "fast_rcnn_inference_with_objectness", "FastRCNNOutputLayers"]
 
 
 logger = logging.getLogger(__name__)
@@ -72,10 +72,21 @@ def fast_rcnn_inference(boxes, scores, features, image_shapes, score_thresh, nms
             the corresponding boxes/scores index in [0, Ri) from the input, for image i.
     """
     result_per_image = [
-        fast_rcnn_inference_single_image(  # Yang's modification
+        fast_rcnn_inference_single_image(
             boxes_per_image, scores_per_image, features, image_shape, score_thresh, nms_thresh, topk_per_image
         )
         for scores_per_image, boxes_per_image, image_shape in zip(scores, boxes, image_shapes)
+    ]
+    return [x[0] for x in result_per_image], [x[1] for x in result_per_image]
+
+
+# Yang's addition
+def fast_rcnn_inference_with_objectness(boxes, scores, objectness_scores, features, image_shapes, score_thresh, nms_thresh, topk_per_image):
+    result_per_image = [
+        fast_rcnn_inference_single_image_with_objectness(  # Yang's modification
+            boxes_per_image, scores_per_image, objectness_per_image, features, image_shape, score_thresh, nms_thresh, topk_per_image
+        )
+        for scores_per_image, objectness_per_image, boxes_per_image, image_shape in zip(scores, objectness_scores, boxes, image_shapes)
     ]
     return [x[0] for x in result_per_image], [x[1] for x in result_per_image]
 
@@ -135,6 +146,59 @@ def fast_rcnn_inference_single_image(
     result.pred_boxes = Boxes(boxes)
     result.scores = scores
     result.bg_scores = bg_scores  # Yang's addition
+    result.embeddings = features  # Yang's addition
+    result.pred_classes = filter_inds[:, 1]
+    return result, filter_inds[:, 0]
+
+
+# Yang's addition
+def fast_rcnn_inference_single_image_with_objectness(
+    boxes, scores, objectness_scores, features, image_shape, score_thresh, nms_thresh, topk_per_image
+):
+    valid_mask = torch.isfinite(boxes).all(dim=1) & torch.isfinite(scores).all(dim=1)
+    if not valid_mask.all():
+        boxes = boxes[valid_mask]
+        scores = scores[valid_mask]
+
+    bg_scores = scores[:, -1]  # Yang's addition
+    scores = scores[:, :-1]
+    num_classes = scores.shape[1] # Yang's addition
+    num_bbox_reg_classes = boxes.shape[1] // 4
+    # Convert to Boxes to use the `clip` function ...
+    boxes = Boxes(boxes.reshape(-1, 4))
+    boxes.clip(image_shape)
+    boxes = boxes.tensor.view(-1, num_bbox_reg_classes, 4)  # R x C x 4
+
+    # Filter results based on detection scores
+    filter_mask = scores > score_thresh  # R x K
+    # R' x 2. First column contains indices of the R predictions;
+    # Second column contains indices of classes.
+    filter_inds = filter_mask.nonzero()  # torch1.5
+    # filter_inds = torch.nonzero(filter_mask, as_tuple=False)  # torch1.6
+    if num_bbox_reg_classes == 1:
+        boxes = boxes[filter_inds[:, 0], 0]
+    else:
+        boxes = boxes[filter_mask]
+    scores = scores[filter_mask]
+
+    # Apply per-class NMS
+    keep = batched_nms(boxes, scores, filter_inds[:, 1], nms_thresh)
+    if topk_per_image >= 0:
+        keep = keep[:topk_per_image]
+
+    boxes, scores, filter_inds = boxes[keep], scores[keep], filter_inds[keep]
+    # Yang: Find out which row are keeped in the original scores tensor (1000, 80+1),
+    # and select the corresponding bg_scores
+    keep_row = torch.div(keep, num_classes)
+    bg_scores = bg_scores[keep_row]
+    objectness_scores = objectness_scores[keep_row]
+    features = features[keep_row]
+
+    result = Instances(image_shape)
+    result.pred_boxes = Boxes(boxes)
+    result.scores = scores
+    result.bg_scores = bg_scores  # Yang's addition
+    result.objectness = objectness_scores  # Yang's addition
     result.embeddings = features  # Yang's addition
     result.pred_classes = filter_inds[:, 1]
     return result, filter_inds[:, 0]
