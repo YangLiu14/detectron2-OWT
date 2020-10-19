@@ -69,6 +69,8 @@ def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_la
     for img in images:
         imgID2fname[img['id']] = img['file_name']
 
+    nbox_ArgoVerse, nbox_BDD, nbox_Charades, nbox_LaSOT, nbox_YFCC100M = 0, 0, 0, 0, 0
+
     for ann in annotations:
         if ann["category_id"] in exclude_classes:
             continue
@@ -81,6 +83,16 @@ def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_la
         src_name = fname.split("/")[1]
         if src_name in ignored_sequences:
             continue
+        if src_name == 'ArgoVerse':
+            nbox_ArgoVerse += 1
+        elif src_name == 'BDD':
+            nbox_BDD += 1
+        elif src_name == 'Charades':
+            nbox_Charades += 1
+        elif src_name == 'LaSOT':
+            nbox_LaSOT += 1
+        elif src_name == 'YFCC100M':
+            nbox_YFCC100M += 1
 
         xc, yc, w, h = ann['bbox']
         # convert [xc, yc, w, h] to [x1, y1, x2, y2]
@@ -93,7 +105,12 @@ def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_la
 
     n_boxes = sum([len(x) for x in gt.values()], 0)
     print("number of gt boxes", n_boxes)
-    return gt, n_boxes
+    nbox = {"ArgoVerse": nbox_ArgoVerse,
+            "BDD": nbox_BDD,
+            "Charades": nbox_Charades,
+            "LaSOT": nbox_LaSOT,
+            "YFCC100M": nbox_YFCC100M}
+    return gt, n_boxes, nbox
 
 
 def load_gt_categories(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_labels'):
@@ -133,6 +150,8 @@ def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: 1 - 
 # def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop["bg_score"]):
     proposals = {}
     for filename in gt.keys():
+        if filename.split('/')[-3] != folder.split('/')[-1]:
+            continue
         prop_filename = os.path.join(folder, "/".join(filename.split("/")[-2:]))
 
         # Exclude from eval
@@ -282,7 +301,7 @@ def export_figs(export_dict, plot_title, output_dir, x_vals):
             np.savetxt(os.path.join(output_dir, item[0] + '.csv'), item[1], delimiter=',', fmt='%1.4f')
 
 
-def evaluate_all_folders_oxford(gt, plot_title, user_specified_result_dir=None, output_dir=None):
+def evaluate_all_folders_oxford(gt, plot_title, n_subset_gt_boxes, user_specified_result_dir=None, output_dir=None):
 
     print("----------- Evaluate Oxford Recall -----------")
 
@@ -307,7 +326,9 @@ def evaluate_all_folders_oxford(gt, plot_title, user_specified_result_dir=None, 
 
             print("---Eval: %s ---" % mydir)
             user_specified_results = evaluate_folder(gt, os.path.join(user_specified_result_dir, mydir))
-            export_dict[mydir] = user_specified_results
+            export_dict[mydir] = dict()
+            export_dict[mydir]['data'] = user_specified_results
+            export_dict[mydir]['nbox_gt'] = n_subset_gt_boxes[mydir]
 
     x_vals = range(1001)
 
@@ -325,32 +346,34 @@ def eval_recall_oxford(output_dir):
     print("evaluating coco 78 classes without hot_dog and oven:")
     exclude_classes = tuple(unknown_tao_ids.union(neighbor_classes))
     # ignored_seq = ("BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA")
-    ignored_seq = ( "HACS", "AVA")
-    gt, n_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
+    ignored_seq = ("HACS", "AVA")
+    gt, n_gt_boxes, n_subset_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
     # gt, n_gt_boxes = load_gt_oxford(exclude_classes, prefix_dir_name=FLAGS.labels)
 
     evaluate_all_folders_oxford(gt, "COCO known classes (" + str(n_gt_boxes) + " bounding boxes)",
+                                n_subset_gt_boxes=n_subset_gt_boxes,
                                 output_dir=output_dir,
                                 user_specified_result_dir=FLAGS.evaluate_dir)
 
     # +++ "neighbor" categories +++
     print("evaluating neighbor classes:")
     exclude_classes = tuple(known_tao_ids.union(unknown_tao_ids))
-    gt, n_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
+    gt, n_gt_boxes, n_subset_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
 
     evaluate_all_folders_oxford(gt, "COCO neighbor classes (" + str(n_gt_boxes) + " bounding boxes)",
+                                n_subset_gt_boxes=n_subset_gt_boxes,
                                 output_dir=output_dir,
                                 user_specified_result_dir=FLAGS.evaluate_dir)
 
     # +++ "unknown" categories +++
     print("evaluating unknown:")
     exclude_classes = tuple(known_tao_ids.union(neighbor_classes))
-    gt, n_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
+    gt, n_gt_boxes, n_subset_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
 
     evaluate_all_folders_oxford(gt, "COCO unknown classes (" + str(n_gt_boxes) + " bounding boxes)",
+                                n_subset_gt_boxes=n_subset_gt_boxes,
                                 output_dir=output_dir,
                                 user_specified_result_dir=FLAGS.evaluate_dir)
-
 
 def main():
 
