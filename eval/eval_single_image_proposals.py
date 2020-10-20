@@ -4,13 +4,15 @@ import glob
 import json
 import matplotlib.pyplot as plt
 import numpy as np
-from pycocotools.mask import toBbox
 import matplotlib
 import argparse
 import datetime
-import time
-import re
 import os
+import re
+import time
+
+from pycocotools.mask import toBbox
+from sklearn import metrics
 
 
 # =======================================================
@@ -276,12 +278,18 @@ def make_plot(export_dict, plot_title, x_vals, linewidth=5):
     itm = export_dict.items()
     itm = sorted(itm, reverse=True)
     for idx, item in enumerate(itm):
-        curve_label = item[0].replace('.', '')
-        plt.plot(x_vals[0:700], item[1][0:700], label=curve_label, linewidth=linewidth)
+        # Compute Area Under Curve
+        # TODO: do I need to compute ROC first?
+        x = x_vals[0:1000]
+        y = item[1]['data'][0:1000]
+        auc = round(metrics.auc(x, y), 2)
+        curve_label = item[0].replace('.', '') + ': n_box(gt)=' + str(item[1]['nbox_gt']) + ', AUC=' + str(auc)
+        # plt.plot(x_vals[0:700], item[1][0:700], label=curve_label, linewidth=linewidth)
+        plt.plot(x_vals[0:1000], item[1]['data'][0:1000], label=curve_label, linewidth=linewidth)
 
     ax = plt.gca()
     ax.set_yticks(np.arange(0, 1.2, 0.2))
-    ax.set_xticks(np.asarray([25, 100, 200, 300, 500, 700]))
+    ax.set_xticks(np.asarray([25, 100, 200, 300, 500, 700, 1000]))
     plt.xlabel("$\#$ proposals")
     plt.ylabel("Recall")
     ax.set_ylim([0.0, 1.0])
@@ -326,6 +334,7 @@ def evaluate_all_folders_oxford(gt, plot_title, n_subset_gt_boxes, user_specifie
 
             print("---Eval: %s ---" % mydir)
             user_specified_results = evaluate_folder(gt, os.path.join(user_specified_result_dir, mydir))
+            # export_dict[mydir] = user_specified_results
             export_dict[mydir] = dict()
             export_dict[mydir]['data'] = user_specified_results
             export_dict[mydir]['nbox_gt'] = n_subset_gt_boxes[mydir]
