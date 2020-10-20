@@ -132,7 +132,7 @@ if __name__ == "__main__":
             video_names.sort()
 
             # Load annotated frames
-            txt_fname = "../datasets/tao/train_annotated_{}.txt".format(video_src)
+            txt_fname = "../datasets/tao/val_annotated_{}.txt".format(video_src)
             with open(txt_fname) as f:
                 content = f.readlines()
             seq_names_from_txt = [os.path.join(args.input[0], x.strip()) for x in content]
