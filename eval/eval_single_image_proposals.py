@@ -283,17 +283,18 @@ def make_plot(export_dict, plot_title, x_vals, linewidth=5):
         x = x_vals[0:1000]
         y = item[1]['data'][0:1000]
         auc = round(metrics.auc(x, y), 2)
-        curve_label = item[0].replace('.', '') + ': n_box(gt)=' + str(item[1]['nbox_gt']) + ', AUC=' + str(auc)
+        # curve_label = item[0].replace('.', '')
+        curve_label = item[0].replace('.', '') + ': nbox(gt)=' + str(item[1]['nbox_gt']) + ', AUC=' + str(auc)
         # plt.plot(x_vals[0:700], item[1][0:700], label=curve_label, linewidth=linewidth)
         plt.plot(x_vals[0:1000], item[1]['data'][0:1000], label=curve_label, linewidth=linewidth)
 
     ax = plt.gca()
     ax.set_yticks(np.arange(0, 1.2, 0.2))
-    ax.set_xticks(np.asarray([25, 100, 200, 300, 500, 700, 1000]))
+    ax.set_xticks(np.asarray([25, 100, 200, 300, 500, 700, 900, 1000]))
     plt.xlabel("$\#$ proposals")
     plt.ylabel("Recall")
     ax.set_ylim([0.0, 1.0])
-    plt.legend()
+    plt.legend(prop={"size": 8})
     plt.grid()
     plt.title(plot_title)
 
@@ -306,7 +307,7 @@ def export_figs(export_dict, plot_title, output_dir, x_vals):
         # Save to csv
         np.savetxt(os.path.join(output_dir, 'num_objects.csv'), np.array(x_vals), delimiter=',', fmt='%d')
         for item in export_dict.items():
-            np.savetxt(os.path.join(output_dir, item[0] + '.csv'), item[1], delimiter=',', fmt='%1.4f')
+            np.savetxt(os.path.join(output_dir, item[0] + '.csv'), item[1]['data'], delimiter=',', fmt='%1.4f')
 
 
 def evaluate_all_folders_oxford(gt, plot_title, n_subset_gt_boxes, user_specified_result_dir=None, output_dir=None):
