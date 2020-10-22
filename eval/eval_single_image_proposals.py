@@ -51,11 +51,19 @@ unknown_tao_ids = unknown_tao_ids.difference(neighbor_classes)
 # =======================================================
 
 
-def score_func():
+def score_func(prop):
     if FLAGS.score_func == "score":
-        return lambda prop: prop["score"]
+        return prop["score"]
     if FLAGS.score_func == "bg_score":
-        return lambda prop: prop["bg_score"]
+        return prop["bg_score"]
+    if FLAGS.score_func == "1-bg_score":
+        return 1 - prop["bg_score"]
+    if FLAGS.score_func == "rpn":
+        return prop["objectness"]
+    if FLAGS.score_func == "bg+rpn":
+        return (1000 * prop["objectness"] + prop["bg_score"]) / 2
+    if FLAGS.score_func == "bg*rpn":
+        return math.sqrt(1000 * prop["objectness"] * prop["bg_score"])
 
 
 def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_labels',
@@ -156,12 +164,6 @@ def load_gt_categories(exclude_classes=(), ignored_sequences=(), prefix_dir_name
 
 
 def load_proposals(folder, gt, ignored_sequences=(), score_fnc=score_func):
-# def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
-# def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
-# def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop["bg_score"]):
-# def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop["objectness"]):
-# def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: math.sqrt(prop["objectness"] * 1000 * prop["bg_score"])):
-# def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: (prop["objectness"] * 1000 + prop["bg_score"]) / 2):
     proposals = {}
     for filename in gt.keys():
         if filename.split('/')[-3] != folder.split('/')[-1]:
@@ -250,14 +252,7 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
     return iou_curve
 
 
-def load_proposals(folder, gt, ignored_sequences=(), score_fnc=score_func):
-# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
-# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
-# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: prop["bg_score"]):
-# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: prop["objectness"]):
-# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: (prop["objectness"] + prop["bg_score"]) / 2):
-# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: math.sqrt(prop["objectness"] * 1000 * prop["bg_score"])):
-# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: (prop["objectness"] * 1000 + prop["bg_score"]) / 2):
+def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=score_func):
     props = load_proposals(folder, gt, ignored_sequences=ignored_sequences, score_fnc=score_fnc)
 
     iou_curve = evaluate_proposals(gt, props)
@@ -437,7 +432,7 @@ if __name__ == "__main__":
                         help='Specify dir containing the labels')
     # parser.add_argument('--labels', type=str, default='oxford_labels',
     #                     help='Specify dir containing the labels')
-    parser.add_argument('--score_func', type=str, help='Sorting criterium to use. Choose from' + \
+    parser.add_argument('--score_func', required=True, type=str, help='Sorting criterium to use. Choose from' + \
                                                         '[score, bg_score, 1-bg_score, rpn, bg+rpn, bg*rpn]')
     parser.add_argument('--do_not_timestamp', action='store_true', help='Dont timestamp output dirs')
 
