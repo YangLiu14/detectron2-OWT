@@ -51,9 +51,11 @@ unknown_tao_ids = unknown_tao_ids.difference(neighbor_classes)
 # =======================================================
 
 
-def score_func(prop):
+def score_func():
     if FLAGS.score_func == "score":
-        return prop["score"]
+        return lambda prop: prop["score"]
+    if FLAGS.score_func == "bg_score":
+        return lambda prop: prop["bg_score"]
 
 
 def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_labels',
