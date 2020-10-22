@@ -2,6 +2,7 @@
 
 import glob
 import json
+import math
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib
@@ -48,6 +49,11 @@ unknown_tao_ids = unknown_tao_ids.difference(neighbor_classes)
 
 # =======================================================
 # =======================================================
+
+
+def score_func(prop):
+    if FLAGS.score_func == "score":
+        return prop["score"]
 
 
 def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_labels',
@@ -147,9 +153,13 @@ def load_gt_categories(exclude_classes=(), ignored_sequences=(), prefix_dir_name
     return gt_cat, n_boxes, gt_cat_map
 
 
+def load_proposals(folder, gt, ignored_sequences=(), score_fnc=score_func):
 # def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
-def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
+# def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
 # def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop["bg_score"]):
+# def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: prop["objectness"]):
+# def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: math.sqrt(prop["objectness"] * 1000 * prop["bg_score"])):
+# def load_proposals(folder, gt, ignored_sequences=(), score_fnc=lambda prop: (prop["objectness"] * 1000 + prop["bg_score"]) / 2):
     proposals = {}
     for filename in gt.keys():
         if filename.split('/')[-3] != folder.split('/')[-1]:
@@ -238,9 +248,14 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
     return iou_curve
 
 
+def load_proposals(folder, gt, ignored_sequences=(), score_fnc=score_func):
 # def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: prop["score"]):
-def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
+# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: 1 - prop["bg_score"]):
 # def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: prop["bg_score"]):
+# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: prop["objectness"]):
+# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: (prop["objectness"] + prop["bg_score"]) / 2):
+# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: math.sqrt(prop["objectness"] * 1000 * prop["bg_score"])):
+# def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: (prop["objectness"] * 1000 + prop["bg_score"]) / 2):
     props = load_proposals(folder, gt, ignored_sequences=ignored_sequences, score_fnc=score_fnc)
 
     iou_curve = evaluate_proposals(gt, props)
@@ -250,6 +265,9 @@ def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=lambda prop: 1 -
     iou_150 = iou_curve[150]
     iou_200 = iou_curve[200]
     iou_700 = iou_curve[700]
+    iou_900 = iou_curve[900]
+    iou_1k = iou_curve[1000]
+
     end_iou = iou_curve[-1]
 
     method_name = os.path.basename(os.path.dirname(folder+"/"))
@@ -326,7 +344,7 @@ def evaluate_all_folders_oxford(gt, plot_title, n_subset_gt_boxes, user_specifie
         dirs.sort()
 
         # ignore_dirs = ["BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA"]
-        ignore_dirs = ["HACS", "AVA"]
+        ignore_dirs = ["ArgoVerse", "BDD", "HACS", "AVA"]
         for mydir in dirs:
             if mydir[0] == '.':
                 continue  # Filter out `.DS_Store` and `._.DS_Store`
@@ -356,7 +374,7 @@ def eval_recall_oxford(output_dir):
     print("evaluating coco 78 classes without hot_dog and oven:")
     exclude_classes = tuple(unknown_tao_ids.union(neighbor_classes))
     # ignored_seq = ("BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA")
-    ignored_seq = ("HACS", "AVA")
+    ignored_seq = ("ArgoVerse", "BDD", "HACS", "AVA")
     gt, n_gt_boxes, n_subset_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
     # gt, n_gt_boxes = load_gt_oxford(exclude_classes, prefix_dir_name=FLAGS.labels)
 
@@ -417,6 +435,8 @@ if __name__ == "__main__":
                         help='Specify dir containing the labels')
     # parser.add_argument('--labels', type=str, default='oxford_labels',
     #                     help='Specify dir containing the labels')
+    parser.add_argument('--score_func', type=str, help='Sorting criterium to use. Choose from' + \
+                                                        '[score, bg_score, 1-bg_score, rpn, bg+rpn, bg*rpn]')
     parser.add_argument('--do_not_timestamp', action='store_true', help='Dont timestamp output dirs')
 
     FLAGS = parser.parse_args()
