@@ -92,16 +92,11 @@ python gen_tao_proposals.py --config-file ../configs/COCO-InstanceSegmentation/m
 python eval_single_image_proposals.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/plot_output/ \
                                       --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/train.json \
                                       --evaluate_dir /storage/slurm/liuyang/TAO_eval/TAO_TRAIN_Proposals/Panoptic_Cas_R101_NMSoff+objectness/json/ \
+                                      --score_func "bg_score" \
                                       --do_not_timestamp
 # TAO_VAL evaluation
 python eval_single_image_proposals.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/plot_output/ \
                                       --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
                                       --evaluate_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness002/json/ \
-                                      --do_not_timestamp
-
-
-
-python eval_single_image_proposals_normal.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/plot_output/ \
-                                      --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
-                                      --evaluate_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff/json/ \
+                                      --score_func "bg_score" \
                                       --do_not_timestamp
