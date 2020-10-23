@@ -317,7 +317,7 @@ def make_plot(export_dict, plot_title, x_vals, linewidth=5):
 def export_figs(export_dict, plot_title, output_dir, x_vals):
     # Export figs, csv
     if output_dir is not None:
-        plt.savefig(os.path.join(output_dir, title_to_filename(plot_title) + ".png"), bbox_inches='tight')
+        plt.savefig(os.path.join(output_dir, title_to_filename(plot_title) + "_" + FLAGS.score_func + ".png"), bbox_inches='tight')
 
         # Save to csv
         np.savetxt(os.path.join(output_dir, 'num_objects.csv'), np.array(x_vals), delimiter=',', fmt='%d')
