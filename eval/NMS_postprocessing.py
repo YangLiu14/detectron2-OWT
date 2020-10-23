@@ -1,8 +1,10 @@
 import argparse
 import glob
 import json
+import math
 import numpy as np
 import os
+import tqdm
 
 
 # https://www.programmersought.com/article/97214443593/
@@ -82,12 +84,21 @@ def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
 
     for prop in proposals:
         cat_id = prop['category_id']
+        if scoring == "one_minus_bg_score":
+            curr_score = 1 - prop['bg_score']
+        elif scoring == "bg_rpn_sum":
+            curr_score = (1000 * prop["objectness"] + prop["bg_score"]) / 2
+        elif scoring == "bg_rpn_product":
+            curr_score = math.sqrt(1000 * prop["objectness"] * prop["bg_score"])
+        else:
+            curr_score = prop[scoring]
+
         if cat_id in props_for_nms.keys():
             props_for_nms[cat_id]['bboxes'].append(prop['bbox'])
-            props_for_nms[cat_id]['scores'].append(prop[scoring])
+            props_for_nms[cat_id]['scores'].append(curr_score)
         else:
             props_for_nms[cat_id] = {'bboxes': [prop['bbox']],
-                                     'scores': [prop[scoring]]}
+                                     'scores': [curr_score]}
 
     output = list()
     for cat_id, data in props_for_nms.items():
@@ -108,13 +119,14 @@ def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
 
 def process_all_folders(root_dir: str, scoring: str, iou_thres: float, outdir: str):
     video_src_names = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(root_dir, '*')))]
-    print("Analysing the following dataset: {}".format(video_src_names))
+    print("Doing NMS for the following dataset: {}".format(video_src_names))
 
     for video_src in video_src_names:
+        print("Processing", video_src)
         video_names = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(root_dir, video_src, '*')))]
         video_names.sort()
 
-        for idx, video_name in enumerate(video_names):
+        for idx, video_name in enumerate(tqdm.tqdm(video_names)):
             all_seq = glob.glob(os.path.join(root_dir, video_src, video_name, "*.json"))
             for seq in all_seq:
                 json_name = seq.split("/")[-1]
@@ -126,8 +138,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--scoring', required=True, type=str, help='score to use during NMS')
     parser.add_argument('--iou_thres', default=0.5, type=float, help='IoU threshold used in NMS')
+    parser.add_argument('--inputdir', required=True, type=str, help='input directory of orginal proposals.')
     parser.add_argument('--outdir', required=True, type=str, help='output directory of the proposals after NMS')
     args = parser.parse_args()
 
-    root_dir = "/home/kloping/OpenSet_MOT/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness/json/"
-    process_all_folders(root_dir, args.scoring, args.iou_thres, args.outdir)
+    process_all_folders(args.inputdir, args.scoring, args.iou_thres, args.outdir)

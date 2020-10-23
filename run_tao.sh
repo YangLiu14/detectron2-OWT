@@ -97,6 +97,14 @@ python eval_single_image_proposals.py --plot_output_dir /storage/slurm/liuyang/T
 # TAO_VAL evaluation
 python eval_single_image_proposals.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/plot_output/ \
                                       --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
-                                      --evaluate_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness002/json/ \
-                                      --score_func "score" \
+                                      --evaluate_dir "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/afterNMS/Panoptic_Cas_R101_NMSoff+objectness_bg*rpn" \
+                                      --score_func "bg*rpn" \
                                       --do_not_timestamp
+
+
+
+# NMS Post-processing
+python NMS_postprocessing.py --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness002/json/ \
+                             --scoring "bg_rpn_product" \
+                             --outdir "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/afterNMS/Panoptic_Cas_R101_NMSoff+objectness_bg*rpn/"
+

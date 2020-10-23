@@ -58,12 +58,15 @@ def score_func(prop):
         return prop["bg_score"]
     if FLAGS.score_func == "1-bg_score":
         return 1 - prop["bg_score"]
-    if FLAGS.score_func == "rpn":
+        # return prop['one_minus_bg_score']
+    if FLAGS.score_func == "objectness":
         return prop["objectness"]
     if FLAGS.score_func == "bg+rpn":
         return (1000 * prop["objectness"] + prop["bg_score"]) / 2
+        # return prop['bg_rpn_sum']
     if FLAGS.score_func == "bg*rpn":
         return math.sqrt(1000 * prop["objectness"] * prop["bg_score"])
+        # return prop['bg_rpn_product']
 
 
 def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_labels',
@@ -341,7 +344,7 @@ def evaluate_all_folders_oxford(gt, plot_title, n_subset_gt_boxes, user_specifie
         dirs.sort()
 
         # ignore_dirs = ["BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA"]
-        ignore_dirs = ["ArgoVerse", "BDD", "HACS", "AVA"]
+        ignore_dirs = ["HACS", "AVA"]
         for mydir in dirs:
             if mydir[0] == '.':
                 continue  # Filter out `.DS_Store` and `._.DS_Store`
@@ -371,7 +374,7 @@ def eval_recall_oxford(output_dir):
     print("evaluating coco 78 classes without hot_dog and oven:")
     exclude_classes = tuple(unknown_tao_ids.union(neighbor_classes))
     # ignored_seq = ("BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA")
-    ignored_seq = ("ArgoVerse", "BDD", "HACS", "AVA")
+    ignored_seq = ("HACS", "AVA")
     gt, n_gt_boxes, n_subset_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
     # gt, n_gt_boxes = load_gt_oxford(exclude_classes, prefix_dir_name=FLAGS.labels)
 
