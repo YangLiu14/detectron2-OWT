@@ -1,5 +1,6 @@
 import argparse
 import glob
+import json
 import numpy as np
 import os
 
@@ -72,29 +73,61 @@ def nms(bounding_boxes, confidence_score, threshold=0.5):
     return picked_boxes, picked_score
 
 
-def process_one_frame():
-    pass
+def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
+    # Load original proposals
+    with open(seq, 'r') as f:
+        proposals = json.load(f)
+
+    props_for_nms = dict()
+
+    for prop in proposals:
+        cat_id = prop['category_id']
+        if cat_id in props_for_nms.keys():
+            props_for_nms[cat_id]['bboxes'].append(prop['bbox'])
+            props_for_nms[cat_id]['scores'].append(prop[scoring])
+        else:
+            props_for_nms[cat_id] = {'bboxes': [prop['bbox']],
+                                     'scores': [prop[scoring]]}
+
+    output = list()
+    for cat_id, data in props_for_nms.items():
+        if len(data['bboxes']) > 1:
+            bboxes_nms, scores_nms = nms(data['bboxes'], data['scores'], iou_thres)
+        else:
+            bboxes_nms, scores_nms = data['bboxes'], data['scores']
+        for box, score in zip(bboxes_nms, scores_nms):
+            output.append({'category_id': cat_id, 'bbox': box, scoring: score})
+
+    # Store proposals after NMS
+    outdir = "/".join(outpath.split("/")[:-1])
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+    with open(outpath, 'w') as f:
+        json.dump(output, f)
 
 
-def process_all_folders(root_dir: str):
+def process_all_folders(root_dir: str, scoring: str, iou_thres: float, outdir: str):
     video_src_names = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(root_dir, '*')))]
     print("Analysing the following dataset: {}".format(video_src_names))
 
     for video_src in video_src_names:
-        video_folder_paths = glob.glob(os.path.join(root_dir, video_src, '*'))
         video_names = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(root_dir, video_src, '*')))]
         video_names.sort()
 
         for idx, video_name in enumerate(video_names):
-            seq = glob.glob(os.path.join(root_dir, video_src, video_name, "*.json"))
-            print("DONE")
+            all_seq = glob.glob(os.path.join(root_dir, video_src, video_name, "*.json"))
+            for seq in all_seq:
+                json_name = seq.split("/")[-1]
+                outpath = os.path.join(outdir, video_src, video_name, json_name)
+                process_one_frame(seq, scoring, iou_thres, outpath)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--scoring', required=True, type=str, help='score to use during NMS')
-    parser.add_argument('--iou_thres', type=float, help='IoU threshold used in NMS')
+    parser.add_argument('--iou_thres', default=0.5, type=float, help='IoU threshold used in NMS')
+    parser.add_argument('--outdir', required=True, type=str, help='output directory of the proposals after NMS')
     args = parser.parse_args()
 
     root_dir = "/home/kloping/OpenSet_MOT/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness/json/"
-    process_all_folders(root_dir)
+    process_all_folders(root_dir, args.scoring, args.iou_thres, args.outdir)
