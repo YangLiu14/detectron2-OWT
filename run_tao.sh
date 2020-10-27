@@ -95,22 +95,20 @@ python eval_single_image_proposals.py --plot_output_dir /storage/slurm/liuyang/T
                                       --score_func "score" \
                                       --do_not_timestamp
 
+# ===============================================================================
 # TAO_VAL evaluation: Recall(of GT-bbox) vs n_props
 python eval_single_image_proposals.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/plot_output/ \
                                       --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
-                                      --evaluate_dir "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/afterNMS/Panoptic_Cas_R101_NMSoff+objectness_bg*rpn" \
-                                      --score_func "bg*rpn" \
+                                      --postNMS \
                                       --do_not_timestamp
 
 
 # TAO_VAL evaluation: Recall(of GT-tracks) vs n_props
 python eval_single_image_proposals_tracks.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/plot_output/ \
                                       --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
-                                      --evaluate_dir "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/afterNMS/Panoptic_Cas_R101_NMSoff+objectness_Score" \
-                                      --score_func "score" \
                                       --do_not_timestamp
 
-
+# ==============================================================================
 # NMS Post-processing
 python NMS_postprocessing.py --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness002/json/ \
                              --scoring "bg_rpn_product" \

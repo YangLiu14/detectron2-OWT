@@ -54,16 +54,20 @@ unknown_tao_ids = unknown_tao_ids.difference(neighbor_classes)
 def score_func(prop):
     if FLAGS.score_func == "score":
         return prop["score"]
-    if FLAGS.score_func == "bg_score":
+    if FLAGS.score_func == "bgScore":
         return prop["bg_score"]
-    if FLAGS.score_func == "1-bg_score":
-        return 1 - prop["bg_score"]
-        # return prop['one_minus_bg_score']
+    if FLAGS.score_func == "1-bgScore":
+        if FLAGS.postNMS:
+            return prop['one_minus_bg_score']
+        else:
+            return 1 - prop["bg_score"]
     if FLAGS.score_func == "objectness":
         return prop["objectness"]
     if FLAGS.score_func == "bg+rpn":
-        return (1000 * prop["objectness"] + prop["bg_score"]) / 2
-        # return prop['bg_rpn_sum']
+        if FLAGS.postNMS:
+            return prop['bg_rpn_sum']
+        else:
+            return (1000 * prop["objectness"] + prop["bg_score"]) / 2
     if FLAGS.score_func == "bg*rpn":
         return math.sqrt(1000 * prop["objectness"] * prop["bg_score"])
         # return prop['bg_rpn_product']
@@ -437,6 +441,7 @@ if __name__ == "__main__":
     #                     help='Specify dir containing the labels')
     parser.add_argument('--score_func', required=True, type=str, help='Sorting criterium to use. Choose from' + \
                                                         '[score, bg_score, 1-bg_score, rpn, bg+rpn, bg*rpn]')
+    parser.add_argument('--postNMS', default=True, type=str, help='processing postNMS proposals or not.')
     parser.add_argument('--do_not_timestamp', action='store_true', help='Dont timestamp output dirs')
 
     FLAGS = parser.parse_args()
