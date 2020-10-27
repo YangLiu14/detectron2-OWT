@@ -269,8 +269,8 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
             else:
                 mask = (all_ious[:, :n_max].max(axis=1) > IOU_THRESHOLD)
                 recalled_track_ids = all_track_ids[mask]
-                t4 = (all_ious[:, :n_max].max(axis=1) > IOU_THRESHOLD).mean()
-                iou_curve.append(t4)
+                ratio = len(set(recalled_track_ids)) / len(set(all_track_ids))
+                iou_curve.append(ratio)
 
     return iou_curve
 
