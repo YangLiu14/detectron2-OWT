@@ -497,30 +497,41 @@ if __name__ == "__main__":
                         help='Specify dir containing the labels')
     # parser.add_argument('--labels', type=str, default='oxford_labels',
     #                     help='Specify dir containing the labels')
-    parser.add_argument('--score_func', required=True, type=str, help='Sorting criterium to use. Choose from' + \
+    parser.add_argument('--score_func', type=str, help='Sorting criterium to use. Choose from' + \
                                                         '[score, bg_score, 1-bg_score, rpn, bg+rpn, bg*rpn]')
-    parser.add_argument('--postNMS', default=True, type=str, help='processing postNMS proposals or not.')
+    parser.add_argument('--postNMS', action='store_true', help='processing postNMS proposals.')
     parser.add_argument('--do_not_timestamp', action='store_true', help='Dont timestamp output dirs')
 
     FLAGS = parser.parse_args()
 
-    base_dir = "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/afterNMS/"
-    props_dirs = ["Panoptic_Cas_R101_NMSoff_(1-bg_score)",
-                  "Panoptic_Cas_R101_NMSoff_bg*rpn",
-                  "Panoptic_Cas_R101_NMSoff_bg+1000rpn",
-                  "Panoptic_Cas_R101_NMSoff_bgScore",
-                  "Panoptic_Cas_R101_NMSoff_objectness",
-                  "Panoptic_Cas_R101_NMSoff_Score"]
+    if FLAGS.postNMS:
+        base_dir = "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/afterNMS/"
+        props_dirs = ["Panoptic_Cas_R101_NMSoff_(1-bg_score)",
+                      "Panoptic_Cas_R101_NMSoff_bg*rpn",
+                      "Panoptic_Cas_R101_NMSoff_bg+1000rpn",
+                      "Panoptic_Cas_R101_NMSoff_bgScore",
+                      "Panoptic_Cas_R101_NMSoff_objectness",
+                      "Panoptic_Cas_R101_NMSoff_Score"]
+    else:
+        base_dir = "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness002/"
+        props_dirs = ["json"]
 
     props_dirs = [base_dir + p for p in props_dirs]
     score_funcs = ["1-bgScore", "bg*rpn", "bg+rpn", "bgScore", "objectness", "score"]
 
-    # for eval_dir, score_f in zip(props_dirs, score_funcs):
-    #     print("Processing", eval_dir)
-    #     FLAGS.evaluate_dir = eval_dir
-    #     FLAGS.score_func = score_f
-    #     main()
-
+    if FLAGS.postNMS:
+        for eval_dir, score_f in zip(props_dirs, score_funcs):
+            print("Processing", eval_dir)
+            FLAGS.evaluate_dir = eval_dir
+            FLAGS.score_func = score_f
+            main()
+    else:
+        for score_f in score_funcs:
+            print("Processing", props_dirs[0])
+            FLAGS.evaluate_dir = props_dirs[0]
+            FLAGS.score_func = score_f
+            main()
+        
     # Combine the images
     image_paths = ["COCOunknownclasses_score.png", "COCOunknownclasses_bgScore.png", "COCOunknownclasses_1-bgScore.png",
                    "COCOunknownclasses_objectness.png", "COCOunknownclasses_bg+rpn.png",
