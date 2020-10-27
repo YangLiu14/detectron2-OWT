@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import cv2
 import glob
 import json
 import math
@@ -54,19 +55,25 @@ unknown_tao_ids = unknown_tao_ids.difference(neighbor_classes)
 def score_func(prop):
     if FLAGS.score_func == "score":
         return prop["score"]
-    if FLAGS.score_func == "bg_score":
+    if FLAGS.score_func == "bgScore":
         return prop["bg_score"]
-    if FLAGS.score_func == "1-bg_score":
-        return 1 - prop["bg_score"]
-        # return prop['one_minus_bg_score']
+    if FLAGS.score_func == "1-bgScore":
+        if FLAGS.postNMS:
+            return prop['one_minus_bg_score']
+        else:
+            return 1 - prop["bg_score"]
     if FLAGS.score_func == "objectness":
         return prop["objectness"]
     if FLAGS.score_func == "bg+rpn":
-        return (1000 * prop["objectness"] + prop["bg_score"]) / 2
-        # return prop['bg_rpn_sum']
+        if FLAGS.postNMS:
+            return prop['bg_rpn_sum']
+        else:
+            return (1000 * prop["objectness"] + prop["bg_score"]) / 2
     if FLAGS.score_func == "bg*rpn":
-        return math.sqrt(1000 * prop["objectness"] * prop["bg_score"])
-        # return prop['bg_rpn_product']
+        if FLAGS.postNMS:
+            return prop['bg_rpn_product']
+        else:
+            return math.sqrt(1000 * prop["objectness"] * prop["bg_score"])
 
 
 def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_labels',
@@ -329,7 +336,7 @@ def make_plot(export_dict, plot_title, x_vals, linewidth=5):
     ax = plt.gca()
     ax.set_yticks(np.arange(0, 1.2, 0.2))
     ax.set_xticks(np.asarray([25, 100, 200, 300, 500, 700, 900, 1000]))
-    plt.xlabel("$\#$ proposals")
+    plt.xlabel("$\#$ proposals {}".format(FLAGS.score_func))
     plt.ylabel("Recall")
     ax.set_ylim([0.0, 1.0])
     plt.legend(prop={"size": 8})
@@ -423,6 +430,40 @@ def eval_recall_oxford(output_dir):
                                 output_dir=output_dir,
                                 user_specified_result_dir=FLAGS.evaluate_dir)
 
+
+def image_stitching(image_paths, rows, cols, out_path):
+    """
+    Stitch list of images into (rows x cols) image-tiles.
+    Args:
+        image_paths: List of image paths, ordered in the fashion that, the 1st image with be placed at (0,0)
+                     in the resulting image tile, the 2nd image at(0,1), 3rd at (0,2) and so on.
+        rows: Int, number of rows in the resulting image tile.
+        cols: Int, number of columns in the resulting image tile.
+        out_path: Str, output path and file name.
+    """
+    assert rows * cols == len(image_paths)
+    # Read images as numpy arrays
+    img_list = [cv2.imread(filename) for filename in image_paths]
+    img_shapes = np.array([np.array(im.shape) for im in img_list])
+    H, W = min(img_shapes[:, 0]), min(img_shapes[:, 1])
+    img_list = [im[:H, :W, :] for im in img_list]
+
+
+    # combine images vertically
+    img_vert = list()
+
+    while img_list:
+        curr_row = img_list[:rows]
+        img_list = img_list[rows:]
+        combined_img = np.hstack(curr_row)
+        img_vert.append(combined_img)
+    # combine images horizontally
+    all_combined = np.vstack(img_vert)
+
+    # Save image
+    cv2.imwrite(out_path, all_combined)
+
+
 def main():
 
     # Matplotlib params
@@ -445,6 +486,7 @@ def main():
         eval_recall_oxford(output_dir=output_dir)
 
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
@@ -457,10 +499,49 @@ if __name__ == "__main__":
     #                     help='Specify dir containing the labels')
     parser.add_argument('--score_func', required=True, type=str, help='Sorting criterium to use. Choose from' + \
                                                         '[score, bg_score, 1-bg_score, rpn, bg+rpn, bg*rpn]')
+    parser.add_argument('--postNMS', default=True, type=str, help='processing postNMS proposals or not.')
     parser.add_argument('--do_not_timestamp', action='store_true', help='Dont timestamp output dirs')
 
     FLAGS = parser.parse_args()
-    main()
+
+    base_dir = "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/afterNMS/"
+    props_dirs = ["Panoptic_Cas_R101_NMSoff_(1-bg_score)",
+                  "Panoptic_Cas_R101_NMSoff_bg*rpn",
+                  "Panoptic_Cas_R101_NMSoff_bg+1000rpn",
+                  "Panoptic_Cas_R101_NMSoff_bgScore",
+                  "Panoptic_Cas_R101_NMSoff_objectness",
+                  "Panoptic_Cas_R101_NMSoff_Score"]
+
+    props_dirs = [base_dir + p for p in props_dirs]
+    score_funcs = ["1-bgScore", "bg*rpn", "bg+rpn", "bgScore", "objectness", "score"]
+
+    # for eval_dir, score_f in zip(props_dirs, score_funcs):
+    #     print("Processing", eval_dir)
+    #     FLAGS.evaluate_dir = eval_dir
+    #     FLAGS.score_func = score_f
+    #     main()
+
+    # Combine the images
+    image_paths = ["COCOunknownclasses_score.png", "COCOunknownclasses_bgScore.png", "COCOunknownclasses_1-bgScore.png",
+                   "COCOunknownclasses_objectness.png", "COCOunknownclasses_bg+rpn.png",
+                   "COCOunknownclasses_bg*rpn.png",
+                   "COCOneighborclasses_score.png", "COCOneighborclasses_bgScore.png",
+                   "COCOneighborclasses_1-bgScore.png", "COCOneighborclasses_objectness.png",
+                   "COCOneighborclasses_bg+rpn.png", "COCOneighborclasses_bg*rpn.png",
+                   "COCOknownclasses_score.png", "COCOknownclasses_bgScore.png", "COCOknownclasses_1-bgScore.png",
+                   "COCOknownclasses_objectness.png", "COCOknownclasses_bg+rpn.png", "COCOknownclasses_bg*rpn.png"]
+    root_dir = FLAGS.plot_output_dir
+    image_paths = [root_dir + i for i in image_paths]
+
+    output_path = FLAGS.plot_output_dir + "combined.png"
+    image_stitching(image_paths, 6, 3, output_path)
+
+    # Delete the images
+    print("Deleting images")
+    for ip in image_paths:
+        os.remove(ip)
+
+
 
 
 
