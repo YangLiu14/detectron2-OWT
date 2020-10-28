@@ -268,13 +268,12 @@ def non_overlap_filter(proposals_per_frame: List[Dict]):
             if intersects(box1, box2):
                 delete_idx.append(j)
     delete_idx.sort()
-
-    print("box deleted:", str(len(delete_idx)))
+    # print("box deleted: {} of {}".format(len(delete_idx), N))
 
     # Get remained proposals
     remain_props = list()
     for i in range(N):
-        if i == delete_idx[0]:
+        if delete_idx and i == delete_idx[0]:
             delete_idx.pop(0)
             continue
         else:
