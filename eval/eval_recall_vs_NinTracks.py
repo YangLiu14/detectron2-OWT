@@ -414,7 +414,7 @@ def make_plot(export_dict, plot_title, x_vals, linewidth=5):
     ax = plt.gca()
     ax.set_yticks(np.arange(0, 1.2, 0.2))
     ax.set_xticks(np.asarray([5, 10, 20, 30, 50, 70, 90, 100]))
-    plt.xlabel("$\#$ proposals {}".format(FLAGS.score_func))
+    plt.xlabel("At Least N detections in one track {}".format(FLAGS.score_func))
     plt.ylabel("Recall")
     ax.set_ylim([0.0, 1.0])
     plt.legend(prop={"size": 8})
