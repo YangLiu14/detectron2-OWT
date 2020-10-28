@@ -15,8 +15,8 @@ import time
 
 from pycocotools.mask import toBbox
 from sklearn import metrics
+from typing import List, Dict
 from eval.eval_utils import image_stitching
-
 
 # =======================================================
 # Global variables
@@ -49,6 +49,7 @@ for coco_id, neighbor_ids in coco2neighbor_classes.items():
 # Exclude neighbor classes from unknown_tao_ids
 unknown_tao_ids = unknown_tao_ids.difference(neighbor_classes)
 
+
 # =======================================================
 # =======================================================
 
@@ -77,9 +78,11 @@ def score_func(prop):
             return math.sqrt(1000 * prop["objectness"] * prop["bg_score"])
 
 
+# ==========================================================================================
+# Loading functions for GT and Proposals
+# ==========================================================================================
 def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_labels',
-            dist_thresh=1000.0, area_thresh=10*10):
-
+            dist_thresh=1000.0, area_thresh=10 * 10):
     with open(prefix_dir_name, 'r') as f:
         gt_json = json.load(f)
 
@@ -147,7 +150,7 @@ def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_la
 
 
 def load_gt_categories(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_labels'):
-    gt_jsons = glob.glob("%s/*/*.json"%prefix_dir_name)
+    gt_jsons = glob.glob("%s/*/*.json" % prefix_dir_name)
 
     gt_cat = {}
     gt_cat_map = {}
@@ -206,6 +209,8 @@ def load_proposals(folder, gt, ignored_sequences=(), score_fnc=score_func):
             continue
 
         props = sorted(props, key=score_fnc, reverse=True)
+        if FLAGS.nonOverlap:
+            props = non_overlap_filter(props)
 
         if "bbox" in props[0]:
             bboxes = [prop["bbox"] for prop in props]
@@ -217,6 +222,65 @@ def load_proposals(folder, gt, ignored_sequences=(), score_fnc=score_func):
         proposals[filename] = bboxes
 
     return proposals
+
+
+# =========================================================================
+# Bbox calculations
+# =========================================================================
+def intersects(box1, box2):
+    """
+    Check if two boxes intersects with each other.
+    Box are in the form of [x1, y1, x2, y2]
+    Returns:
+        bool
+    """
+    max_x1 = max(box1[0], box2[0])
+    max_y1 = max(box1[1], box2[1])
+    min_x2 = min(box1[2], box2[2])
+    min_y2 = min(box2[3], box2[3])
+
+    if max_x1 < min_x2 and max_y1 < min_y2:
+        return True
+    else:
+        return False
+
+
+def non_overlap_filter(proposals_per_frame: List[Dict]):
+    """
+    Filter out overlapping bboxes. If two bboxes are overlapping, keep the bbox with the higher score,
+    according to the score_func.
+    The bbox is already sorted according to score_fnc.
+
+    Returns:
+        remaining proposals. Same data structure as the input.
+    """
+    # Find out the index of the proposals to be filtered out.
+    delete_idx = list()
+    N = len(proposals_per_frame)
+    for i in range(N):
+        if i in delete_idx:
+            continue
+        box1 = proposals_per_frame[i]['bbox']
+        for j in range(i + 1, N):
+            if j in delete_idx:
+                continue
+            box2 = proposals_per_frame[j]['bbox']
+            if intersects(box1, box2):
+                delete_idx.append(j)
+    delete_idx.sort()
+
+    print("box deleted:", str(len(delete_idx)))
+
+    # Get remained proposals
+    remain_props = list()
+    for i in range(N):
+        if i == delete_idx[0]:
+            delete_idx.pop(0)
+            continue
+        else:
+            remain_props.append(proposals_per_frame[i])
+
+    return remain_props
 
 
 def calculate_ious(bboxes1, bboxes2):
@@ -263,22 +327,25 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
     all_ious = np.concatenate(all_ious)
     all_track_ids = np.concatenate(all_track_ids)
     if IOU_THRESHOLD is None:
-        iou_curve = [0.0 if n_max == 0 else all_ious[:, :n_max].max(axis=1).mean() for n_max in range(0, n_max_proposals + 1)]
+        iou_curve = [0.0 if n_max == 0 else all_ious[:, :n_max].max(axis=1).mean() for n_max in
+                     range(0, n_max_proposals + 1)]
     else:
         assert 0 <= IOU_THRESHOLD <= 1
-        # iou_curve = [0.0 if n_max == 0 else (all_ious[:, :n_max].max(axis=1) > IOU_THRESHOLD).mean() for n_max in
-        #              range(0, n_max_proposals + 1)]
-
-        iou_curve = list()
-        recalled_track_ids = set()
-        for n_max in range(0, n_max_proposals + 1):
-            if n_max == 0:
-                iou_curve.append(0.0)
-            else:
-                mask = (all_ious[:, :n_max].max(axis=1) > IOU_THRESHOLD)
-                recalled_track_ids = all_track_ids[mask]
-                ratio = len(set(recalled_track_ids)) / len(set(all_track_ids))
-                iou_curve.append(ratio)
+        if FLAGS.recall_based_on == "gt_bboxes":
+            iou_curve = [0.0 if n_max == 0 else (all_ious[:, :n_max].max(axis=1) > IOU_THRESHOLD).mean() for n_max in
+                         range(0, n_max_proposals + 1)]
+        elif FLAGS.recall_based_on == "tracks":
+            iou_curve = list()
+            for n_max in range(0, n_max_proposals + 1):
+                if n_max == 0:
+                    iou_curve.append(0.0)
+                else:
+                    mask = (all_ious[:, :n_max].max(axis=1) > IOU_THRESHOLD)
+                    recalled_track_ids = all_track_ids[mask]
+                    ratio = len(set(recalled_track_ids)) / len(set(all_track_ids))
+                    iou_curve.append(ratio)
+        else:
+            raise Exception(FLAGS.recall_based_on, "is not a valid option, choose from [gt_bboxes, tracks]")
 
     return iou_curve
 
@@ -298,7 +365,7 @@ def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=score_func):
 
     end_iou = iou_curve[-1]
 
-    method_name = os.path.basename(os.path.dirname(folder+"/"))
+    method_name = os.path.basename(os.path.dirname(folder + "/"))
 
     print("%s: R50: %1.2f, R100: %1.2f, R150: %1.2f, R200: %1.2f, R700: %1.2f, R_total: %1.2f" %
           (method_name,
@@ -313,7 +380,7 @@ def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=score_func):
 
 
 def title_to_filename(plot_title):
-    filtered_title = re.sub("[\(\[].*?[\)\]]", "", plot_title) # Remove the content within the brackets
+    filtered_title = re.sub("[\(\[].*?[\)\]]", "", plot_title)  # Remove the content within the brackets
     filtered_title = filtered_title.replace("_", "").replace(" ", "").replace(",", "_")
     return filtered_title
 
@@ -325,7 +392,6 @@ def make_plot(export_dict, plot_title, x_vals, linewidth=5):
     itm = sorted(itm, reverse=True)
     for idx, item in enumerate(itm):
         # Compute Area Under Curve
-        # TODO: do I need to compute ROC first?
         x = x_vals[0:1000]
         y = item[1]['data'][0:1000]
         auc = round(metrics.auc(x, y), 2)
@@ -348,7 +414,8 @@ def make_plot(export_dict, plot_title, x_vals, linewidth=5):
 def export_figs(export_dict, plot_title, output_dir, x_vals):
     # Export figs, csv
     if output_dir is not None:
-        plt.savefig(os.path.join(output_dir, title_to_filename(plot_title) + "_" + FLAGS.score_func + ".png"), bbox_inches='tight')
+        plt.savefig(os.path.join(output_dir, title_to_filename(plot_title) + "_" + FLAGS.score_func + ".png"),
+                    bbox_inches='tight')
 
         # Save to csv
         np.savetxt(os.path.join(output_dir, 'num_objects.csv'), np.array(x_vals), delimiter=',', fmt='%d')
@@ -357,7 +424,6 @@ def export_figs(export_dict, plot_title, output_dir, x_vals):
 
 
 def evaluate_all_folders_oxford(gt, plot_title, n_subset_gt_boxes, user_specified_result_dir=None, output_dir=None):
-
     print("----------- Evaluate Oxford Recall -----------")
 
     # Export dict
@@ -396,7 +462,6 @@ def evaluate_all_folders_oxford(gt, plot_title, n_subset_gt_boxes, user_specifie
 
 
 def eval_recall_oxford(output_dir):
-
     # +++ Most common categories +++
     # print("evaluating car, bike, person, bus:")
     print("evaluating coco 78 classes without hot_dog and oven:")
@@ -433,7 +498,6 @@ def eval_recall_oxford(output_dir):
 
 
 def main():
-
     # Matplotlib params
     matplotlib.rcParams.update({'font.size': 15})
     matplotlib.rcParams.update({'font.family': 'sans-serif'})
@@ -459,20 +523,27 @@ if __name__ == "__main__":
 
     # Args
     parser.add_argument('--plot_output_dir', type=str, help='Plots output dir.')
+    parser.add_argument('--props_base_dir', type=str, help='Base directory of the proposals to be evaluated.')
     parser.add_argument('--evaluate_dir', type=str, help='Dir containing result files that you want to evaluate')
     parser.add_argument('--labels', type=str, default='',
                         help='Specify dir containing the labels')
     # parser.add_argument('--labels', type=str, default='oxford_labels',
     #                     help='Specify dir containing the labels')
-    parser.add_argument('--score_func', type=str, help='Sorting criterium to use. Choose from' + \
-                                                        '[score, bg_score, 1-bg_score, rpn, bg+rpn, bg*rpn]')
+    parser.add_argument('--recall_based_on', required=True, type=str, help='Calculate recall based on' +
+                                                                           'number of GT-bbox or on number of tracks')
+    parser.add_argument('--score_func', type=str, help='Sorting criterion to use. Choose from' +
+                                                       '[score, bg_score, 1-bg_score, rpn, bg+rpn, bg*rpn]')
     parser.add_argument('--postNMS', action='store_true', help='processing postNMS proposals.')
+    parser.add_argument('--nonOverlap', action='store_true', help='Filter out the overlapping bboxes in proposals')
     parser.add_argument('--do_not_timestamp', action='store_true', help='Dont timestamp output dirs')
 
     FLAGS = parser.parse_args()
 
+    # Check args
+    if FLAGS.recall_based_on not in ['gt_bboxes', 'tracks']:
+        raise Exception(FLAGS.recall_based_on, "is not a valid option, choose from [gt_bboxes, tracks]")
+
     if FLAGS.postNMS:
-        base_dir = "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/afterNMS/"
         props_dirs = ["Panoptic_Cas_R101_NMSoff_(1-bg_score)",
                       "Panoptic_Cas_R101_NMSoff_bg*rpn",
                       "Panoptic_Cas_R101_NMSoff_bg+1000rpn",
@@ -480,10 +551,9 @@ if __name__ == "__main__":
                       "Panoptic_Cas_R101_NMSoff_objectness",
                       "Panoptic_Cas_R101_NMSoff_Score"]
     else:
-        base_dir = "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness002/"
         props_dirs = ["json"]
 
-    props_dirs = [base_dir + p for p in props_dirs]
+    props_dirs = [FLAGS.props_base_dir + p for p in props_dirs]
     score_funcs = ["1-bgScore", "bg*rpn", "bg+rpn", "bgScore", "objectness", "score"]
 
     if FLAGS.postNMS:
@@ -498,7 +568,7 @@ if __name__ == "__main__":
             FLAGS.evaluate_dir = props_dirs[0]
             FLAGS.score_func = score_f
             main()
-        
+
     # Combine the images
     image_paths = ["COCOunknownclasses_score.png", "COCOunknownclasses_bgScore.png", "COCOunknownclasses_1-bgScore.png",
                    "COCOunknownclasses_objectness.png", "COCOunknownclasses_bg+rpn.png",
@@ -518,9 +588,3 @@ if __name__ == "__main__":
     print("Deleting images")
     for ip in image_paths:
         os.remove(ip)
-
-
-
-
-
-

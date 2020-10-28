@@ -302,7 +302,6 @@ def make_plot(export_dict, plot_title, x_vals, linewidth=5):
     itm = sorted(itm, reverse=True)
     for idx, item in enumerate(itm):
         # Compute Area Under Curve
-        # TODO: do I need to compute ROC first?
         x = x_vals[0:1000]
         y = item[1]['data'][0:1000]
         auc = round(metrics.auc(x, y), 2)
