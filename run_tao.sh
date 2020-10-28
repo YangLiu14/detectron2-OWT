@@ -126,6 +126,7 @@ python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eva
                                 --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/afterNMS/ \
                                 --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
                                 --recall_based_on tracks \
+                                --nonOverlap \
                                 --postNMS --do_not_timestamp
 
 # ==============================================================================
