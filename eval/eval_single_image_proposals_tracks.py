@@ -15,6 +15,7 @@ import time
 
 from pycocotools.mask import toBbox
 from sklearn import metrics
+from eval.eval_utils import image_stitching
 
 
 # =======================================================
@@ -431,39 +432,6 @@ def eval_recall_oxford(output_dir):
                                 user_specified_result_dir=FLAGS.evaluate_dir)
 
 
-def image_stitching(image_paths, rows, cols, out_path):
-    """
-    Stitch list of images into (rows x cols) image-tiles.
-    Args:
-        image_paths: List of image paths, ordered in the fashion that, the 1st image with be placed at (0,0)
-                     in the resulting image tile, the 2nd image at(0,1), 3rd at (0,2) and so on.
-        rows: Int, number of rows in the resulting image tile.
-        cols: Int, number of columns in the resulting image tile.
-        out_path: Str, output path and file name.
-    """
-    assert rows * cols == len(image_paths)
-    # Read images as numpy arrays
-    img_list = [cv2.imread(filename) for filename in image_paths]
-    img_shapes = np.array([np.array(im.shape) for im in img_list])
-    H, W = min(img_shapes[:, 0]), min(img_shapes[:, 1])
-    img_list = [im[:H, :W, :] for im in img_list]
-
-
-    # combine images vertically
-    img_vert = list()
-
-    while img_list:
-        curr_row = img_list[:rows]
-        img_list = img_list[rows:]
-        combined_img = np.hstack(curr_row)
-        img_vert.append(combined_img)
-    # combine images horizontally
-    all_combined = np.vstack(img_vert)
-
-    # Save image
-    cv2.imwrite(out_path, all_combined)
-
-
 def main():
 
     # Matplotlib params
@@ -484,7 +452,6 @@ def main():
             os.makedirs(output_dir)
 
         eval_recall_oxford(output_dir=output_dir)
-
 
 
 if __name__ == "__main__":
