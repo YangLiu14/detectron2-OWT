@@ -81,7 +81,7 @@ def get_parser():
         help="A file or directory to save output proposals as json files. "
     )
     parser.add_argument(
-        "--video_src_name",
+        "--video_src_name", nargs='+',
         help="Specify the video_src_name (the name of the dataset) that you want to process. "
              "Otherwise, process every folder in the given root directory.",
     )
@@ -123,7 +123,7 @@ if __name__ == "__main__":
         # video_names = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(args.input[0], '*'))) if fn.split('/')[-1][0] == 'b']
         video_src_names = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(args.input[0], '*')))]
         if args.video_src_name:  #only process that one video src
-            video_src_names = [args.video_src_name]
+            video_src_names = args.video_src_name
         print("Processing the following dataset: {}".format(video_src_names))
 
         for video_src in video_src_names:
@@ -132,7 +132,7 @@ if __name__ == "__main__":
             video_names.sort()
 
             # Load annotated frames
-            txt_fname = "../datasets/tao/train_annotated_{}.txt".format(video_src)
+            txt_fname = "../datasets/tao/val_annotated_{}.txt".format(video_src)
             with open(txt_fname) as f:
                 content = f.readlines()
             seq_names_from_txt = [os.path.join(args.input[0], x.strip()) for x in content]
