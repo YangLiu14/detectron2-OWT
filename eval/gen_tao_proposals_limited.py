@@ -123,7 +123,7 @@ if __name__ == "__main__":
         # video_names = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(args.input[0], '*'))) if fn.split('/')[-1][0] == 'b']
         video_src_names = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(args.input[0], '*')))]
         if args.video_src_name:  #only process that one video src
-            video_src_names = args.video_src_name
+            video_src_names = args.video_src_name[0].split()
         print("Processing the following dataset: {}".format(video_src_names))
 
         for video_src in video_src_names:
