@@ -13,6 +13,7 @@ from detectron2.data.detection_utils import read_image
 from pycocotools.mask import encode, decode
 from detectron2.structures.instances import Instances
 from typing import List
+from itertools import groupby
 
 
 def filter_pred_by(valid_classes: List[int], predictions):
@@ -58,6 +59,13 @@ def mask2polygon(mask):
         print('error in cv2.findContours')
 
     return segmentation
+
+def mask2RLE(mask):
+    """Convert binary mask to RLE format
+    :param mask: numpy array
+    :return:
+    """
+
 
 
 def store_coco(predictions, input_img_path: str, valid_classes: List[int], json_outdir: str):
@@ -138,7 +146,11 @@ def store_TAOjson(predictions, input_img_path: str, valid_classes: List[int], js
             proposal['category_id'] = pred_classes[i].cpu().numpy().tolist()
             bbox = predictions['instances'].pred_boxes[i].tensor.cpu().numpy().tolist()[0]
             proposal['bbox'] = [int(b) for b in bbox]  # Convert bbox coordinates to int
-            # proposal['instance_mask'] = predictions['instances'].pred_masks[i].cpu().numpy().tolist()
+            # Convert mask(numpy array) to mask(RLE)
+            mask = predictions['instances'].pred_masks[i].cpu().numpy()
+            mask_rle = encode(np.array(mask[:, :, np.newaxis], order='F'))[0]
+            mask_rle['counts'] = mask_rle['counts'].decode(encoding="utf-8")
+            proposal['instance_mask'] = mask_rle
             proposal['score'] = predictions['instances'].scores[i].cpu().numpy().tolist()
             proposal['bg_score'] = predictions['instances'].bg_scores[i].cpu().numpy().tolist()
             proposal['objectness'] = predictions['instances'].objectness[i].cpu().numpy().tolist()
@@ -149,6 +161,7 @@ def store_TAOjson(predictions, input_img_path: str, valid_classes: List[int], js
 
     with open(json_outpath, 'w') as fout:
         json.dump(output, fout)
+
 
 
 def analyse_coco_cat(predictions, input_img_path: str, valid_classes: List[int], json_outdir: str):
