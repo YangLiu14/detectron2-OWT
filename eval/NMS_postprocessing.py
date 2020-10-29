@@ -93,6 +93,41 @@ def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
         else:
             curr_score = prop[scoring]
 
+        props_for_nms = {'bboxes': [prop['bbox']],
+                         'scores': [curr_score]}
+
+    output = list()
+    bboxes_nms, scores_nms = nms(props_for_nms['bboxes'], props_for_nms['scores'], iou_thres)
+    # Class-agnostic fashion: does not output category id
+    for box, score in zip(bboxes_nms, scores_nms):
+        output.append({'bbox': box, scoring: score})
+
+    # Store proposals after NMS
+    outdir = "/".join(outpath.split("/")[:-1])
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+    with open(outpath, 'w') as f:
+        json.dump(output, f)
+
+
+def process_one_frame_categorywise(seq: str, scoring: str, iou_thres: float, outpath: str):
+    # Load original proposals
+    with open(seq, 'r') as f:
+        proposals = json.load(f)
+
+    props_for_nms = dict()
+
+    for prop in proposals:
+        cat_id = prop['category_id']
+        if scoring == "one_minus_bg_score":
+            curr_score = 1 - prop['bg_score']
+        elif scoring == "bg_rpn_sum":
+            curr_score = (1000 * prop["objectness"] + prop["bg_score"]) / 2
+        elif scoring == "bg_rpn_product":
+            curr_score = math.sqrt(1000 * prop["objectness"] * prop["bg_score"])
+        else:
+            curr_score = prop[scoring]
+
         if cat_id in props_for_nms.keys():
             props_for_nms[cat_id]['bboxes'].append(prop['bbox'])
             props_for_nms[cat_id]['scores'].append(curr_score)
@@ -131,15 +166,21 @@ def process_all_folders(root_dir: str, scoring: str, iou_thres: float, outdir: s
             for seq in all_seq:
                 json_name = seq.split("/")[-1]
                 outpath = os.path.join(outdir, video_src, video_name, json_name)
-                process_one_frame(seq, scoring, iou_thres, outpath)
+                if args.categorywise:
+                    process_one_frame_categorywise(seq, scoring, iou_thres, outpath)
+                else:
+                    process_one_frame(seq, scoring, iou_thres, outpath)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--scoring', required=True, type=str, help='score to use during NMS')
     parser.add_argument('--iou_thres', default=0.5, type=float, help='IoU threshold used in NMS')
+    parser.add_argument('--categorywise', action='store_true', help='Only perform NMS among the same category.'
+                                                                    'If not enabled, do NMS globally on every bboxes,'
+                                                                    'ignoring their categories')
     parser.add_argument('--inputdir', required=True, type=str, help='input directory of orginal proposals.')
     parser.add_argument('--outdir', required=True, type=str, help='output directory of the proposals after NMS')
     args = parser.parse_args()
-
+    
     process_all_folders(args.inputdir, args.scoring, args.iou_thres, args.outdir)
