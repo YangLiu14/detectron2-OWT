@@ -13,7 +13,7 @@ import os
 import re
 import time
 
-from pycocotools.mask import toBbox
+from pycocotools.mask import toBbox, encode, decode
 from sklearn import metrics
 from typing import List, Dict
 from eval.eval_utils import image_stitching
@@ -210,7 +210,7 @@ def load_proposals(folder, gt, ignored_sequences=(), score_fnc=score_func):
 
         props = sorted(props, key=score_fnc, reverse=True)
         if FLAGS.nonOverlap:
-            props = non_overlap_filter(props)
+            props = remove_mask_overlap(props)
 
         if "bbox" in props[0]:
             bboxes = [prop["bbox"] for prop in props]
@@ -225,7 +225,7 @@ def load_proposals(folder, gt, ignored_sequences=(), score_fnc=score_func):
 
 
 # =========================================================================
-# Bbox calculations
+# Non Overlap
 # =========================================================================
 def intersects(box1, box2):
     """
@@ -243,6 +243,45 @@ def intersects(box1, box2):
         return True
     else:
         return False
+
+
+def remove_mask_overlap(proposals):
+    """
+    Args:
+        proposals: List[Dict], sorted proposals according specific scoring criterion. Each proposal contains:
+        {
+            category_id: int,
+            bbox: [x1, y1, x2, y2],
+            score: float (could be named differently, e.g. bg_score, objectness, etc)
+            instance_mask: COCO_RLE format,
+        }
+
+    Returns:
+        selected_props, List[Dict]
+    """
+    masks = [decode(prop['instance_mask']) for prop in proposals]
+    idx = [i for i in range(len(proposals))]
+    labels = np.arange(1, len(proposals) + 1)
+    png = np.zeros_like(masks[0])
+
+    # Put the mask there in reversed order, so that the latter one would just cover the previous one,
+    # and the latter one has higher score. (Because proposals are sorted)
+    for i in reversed(range(len(proposals))):
+        png[masks[i].astype("bool")] = labels[i]
+
+    refined_masks = [(png == id_).astype(np.uint8) for id_ in labels]
+    refined_segmentations = [encode(np.asfortranarray(refined_mask)) for refined_mask in refined_masks]
+    selected_props = []
+    for prop, refined_segmentation, mask in zip(proposals, refined_segmentations, refined_masks):
+        refined_segmentation['counts'] = refined_segmentation['counts'].decode("utf-8")
+        prop['instance_mask'] = refined_segmentation
+        prop['bbox'] = toBbox(refined_segmentation)
+        # prop['mask'] = mask   # TODO: check if the mask if just numpy array, if so, we don't need
+
+        selected_props.append(prop)
+
+    assert len(proposals) == len(selected_props)
+    return selected_props
 
 
 def non_overlap_filter(proposals_per_frame: List[Dict]):
