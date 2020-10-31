@@ -75,13 +75,13 @@ def nms_bbox(bounding_boxes, confidence_score, threshold=0.5):
         left = np.where(ratio < threshold)
         order = order[left]
 
-    # TEST: ensure that the picked scores are in descending order
-    for i in range(1, len(picked_score)):
-        if picked_score[i-1] < picked_score[i]:
-            msg = "{} at index {} should not be smaller than {} at index {}.".format(picked_score[i-1], i-1,
-                                                                                     picked_score[i], i)
-            warnings.warn(msg)
-    # END of TEST
+    # # TEST: ensure that the picked scores are in descending order
+    # for i in range(1, len(picked_score)):
+    #     if picked_score[i-1] < picked_score[i]:
+    #         msg = "{} at index {} should not be smaller than {} at index {}.".format(picked_score[i-1], i-1,
+    #                                                                                  picked_score[i], i)
+    #         warnings.warn(msg)
+    # # END of TEST
 
     return picked_boxes, picked_score
 
