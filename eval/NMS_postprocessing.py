@@ -5,6 +5,7 @@ import math
 import numpy as np
 import os
 import tqdm
+import warnings
 
 from pycocotools.mask import encode, decode, iou
 
@@ -74,13 +75,12 @@ def nms_bbox(bounding_boxes, confidence_score, threshold=0.5):
         left = np.where(ratio < threshold)
         order = order[left]
 
-
     # TEST: ensure that the picked scores are in descending order
     for i in range(1, len(picked_score)):
         if picked_score[i-1] < picked_score[i]:
             msg = "{} at index {} should not be smaller than {} at index {}.".format(picked_score[i-1], i-1,
                                                                                      picked_score[i], i)
-            raise Exception(msg)
+            warnings.warn(msg)
     # END of TEST
 
     return picked_boxes, picked_score
@@ -111,11 +111,14 @@ def nms_mask(masks, confidence_score, threshold=0.5):
     order = np.argsort(score)
 
     remained_masks = masks.copy()  # masks remains to be evaluated
-    remained_scores = confidence_score.copy() # masks remains to be evaluated
+    remained_scores = confidence_score.copy()  # masks remains to be evaluated
     last_len = -1
     while True:
         # The index of largest confidence score
-        index = order[-1]
+        try:
+            index = order[-1]
+        except:
+            print("asd")
 
         # Pick the mask with largest confidence score
         picked_masks.append(remained_masks[index])
@@ -132,10 +135,13 @@ def nms_mask(masks, confidence_score, threshold=0.5):
             score = np.array(remained_scores)
             order = np.argsort(score)
             last_len = remained_idx.size
+            if len(remained_masks) == 0:
+                break
             continue
         if remained_idx.size == 0:
             picked_masks += remained_masks
             picked_score += remained_scores
+            # print("the last {} proposals were just added".format(len(remained_masks)))
             break
         last_len = remained_idx.size
 
@@ -148,13 +154,13 @@ def nms_mask(masks, confidence_score, threshold=0.5):
         score = np.array(remained_scores)
         order = np.argsort(score)
 
-    # TEST: ensure that the picked scores are in descending order
-    for i in range(1, len(picked_score)):
-        if picked_score[i-1] < picked_score[i]:
-            msg = "{} at index {} should not be smaller than {} at index {}.".format(picked_score[i-1], i-1,
-                                                                                     picked_score[i], i)
-            raise Exception(msg)
-    # END of TEST
+    # # TEST: ensure that the picked scores are in descending order
+    # for i in range(1, len(picked_score)):
+    #     if picked_score[i-1] < picked_score[i]:
+    #         msg = "{} at index {} should not be smaller than {} at index {}. Total: {}".format(picked_score[i-1], i-1,
+    #                                                                                  picked_score[i], i, len(picked_score))
+    #         warnings.warn(msg)
+    # # END of TEST
 
     return picked_masks, picked_score
 
@@ -258,7 +264,7 @@ def process_all_folders(root_dir: str, scoring: str, iou_thres: float, outdir: s
             all_seq = glob.glob(os.path.join(root_dir, video_src, video_name, "*.json"))
             for seq in all_seq:
                 json_name = seq.split("/")[-1]
-                outpath = os.path.join(outdir + "_" + args.scoring, video_src, video_name, json_name)
+                outpath = os.path.join(outdir + "_" + scoring, video_src, video_name, json_name)
                 if args.categorywise:
                     process_one_frame_categorywise(seq, scoring, iou_thres, outpath)
                 else:
@@ -281,4 +287,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     for scoring in args.scorings:
+        print("NMS using {}".format(scoring))
         process_all_folders(args.inputdir, scoring, args.iou_thres, args.outdir)

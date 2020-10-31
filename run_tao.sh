@@ -130,7 +130,7 @@ python eval_recall_vs_NinTracks.py --plot_output_dir /storage/slurm/liuyang/TAO_
 # ==============================================================================
 # NMS Post-processing
 # ==============================================================================
-python NMS_postprocessing.py --scorings "score" "bg_score" "one_minus_bg_score" "objectness", "bg_rpn_sum", "bg_rpn_product" \
+python NMS_postprocessing.py --scorings "score" "bg_score" "one_minus_bg_score" "objectness" "bg_rpn_sum" "bg_rpn_product" \
                              --nms_criterion instance_mask \
                              --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness003/json/ \
                              --outdir "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/afterNMS/Panoptic_Cas_R101_NMSoff+objectness003"
