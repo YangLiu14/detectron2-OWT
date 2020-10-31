@@ -285,7 +285,6 @@ def remove_mask_overlap(proposals):
     return selected_props
 
 
-
 def non_overlap_filter(proposals_per_frame: List[Dict]):
     """
     Filter out overlapping bboxes. If two bboxes are overlapping, keep the bbox with the higher score,
