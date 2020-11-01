@@ -91,14 +91,14 @@ python gen_tao_proposals.py --config-file ../configs/COCO-InstanceSegmentation/m
 # ===============================================================================
 # TAO_VAL evaluation: Recall(of GT-bbox) vs n_props
 # No NMS
-python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/plot_output/ \
-                                --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness002/ \
+python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/plot_output_noNMSnoOverlap_gtBox/ \
+                                --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness003/ \
                                 --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
                                 --recall_based_on gt_bboxes \
                                 --do_not_timestamp
 # Post NMS
 python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/plot_output/ \
-                                --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/postNMS_bbox/ \
+                                --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/postNMS_mask002/ \
                                 --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
                                 --recall_based_on gt_bboxes \
                                 --nonOverlap \
@@ -107,8 +107,8 @@ python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eva
 
 # TAO_VAL evaluation: Recall(of GT-tracks) vs n_props
 # No NMS
-python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/plot_output/ \
-                                --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness002/ \
+python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/plot_output_noNMSnoOverlap_tracks/ \
+                                --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness003/ \
                                 --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
                                 --recall_based_on tracks \
                                 --do_not_timestamp

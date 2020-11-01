@@ -14,7 +14,7 @@ import tqdm
 import re
 import time
 
-from pycocotools.mask import toBbox, encode, decode
+from pycocotools.mask import toBbox, encode, decode, area
 from sklearn import metrics
 from typing import List, Dict
 from eval.eval_utils import image_stitching
@@ -275,6 +275,8 @@ def remove_mask_overlap(proposals):
     refined_segmentations = [encode(np.asfortranarray(refined_mask)) for refined_mask in refined_masks]
     selected_props = []
     for prop, refined_segmentation, mask in zip(proposals, refined_segmentations, refined_masks):
+        if area(refined_segmentation) <= 1:
+            continue
         refined_segmentation['counts'] = refined_segmentation['counts'].decode("utf-8")
         prop['instance_mask'] = refined_segmentation
         prop['bbox'] = toBbox(refined_segmentation)
@@ -282,7 +284,6 @@ def remove_mask_overlap(proposals):
 
         selected_props.append(prop)
 
-    assert len(proposals) == len(selected_props)
     return selected_props
 
 
