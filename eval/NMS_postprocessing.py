@@ -139,9 +139,8 @@ def nms_mask(masks, confidence_score, threshold=0.5):
                 break
             continue
         if remained_idx.size == 0:
-            picked_masks += remained_masks
-            picked_score += remained_scores
-            # print("the last {} proposals were just added".format(len(remained_masks)))
+            # every mask in the remained_mask is invalid,
+            # because they all overlap with current mask with IoU > threshold
             break
         last_len = remained_idx.size
 
@@ -154,12 +153,12 @@ def nms_mask(masks, confidence_score, threshold=0.5):
         score = np.array(remained_scores)
         order = np.argsort(score)
 
-    # # TEST: ensure that the picked scores are in descending order
-    # for i in range(1, len(picked_score)):
-    #     if picked_score[i-1] < picked_score[i]:
-    #         msg = "{} at index {} should not be smaller than {} at index {}. Total: {}".format(picked_score[i-1], i-1,
-    #                                                                                  picked_score[i], i, len(picked_score))
-    #         warnings.warn(msg)
+    # TEST: ensure that the picked scores are in descending order
+    for i in range(1, len(picked_score)):
+        if picked_score[i-1] < picked_score[i]:
+            msg = "{} at index {} should not be smaller than {} at index {}. Total: {}".format(picked_score[i-1], i-1,
+                                                                                     picked_score[i], i, len(picked_score))
+            warnings.warn(msg)
     # # END of TEST
 
     return picked_masks, picked_score
