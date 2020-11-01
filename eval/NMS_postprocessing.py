@@ -7,7 +7,7 @@ import os
 import tqdm
 import warnings
 
-from pycocotools.mask import encode, decode, iou
+from pycocotools.mask import encode, decode, iou, toBbox
 
 
 # https://www.programmersought.com/article/97214443593/
@@ -197,8 +197,19 @@ def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
         raise Exception(args.nms_criterion, "invalid. Please choose from `bbox` or `mask`")
 
     # Class-agnostic fashion: does not output category id
-    for prop, score in zip(props_nms, scores_nms):
-        output.append({args.nms_criterion: prop, scoring: score})
+    if args.nms_criterion == 'instance_mask':
+        for prop, score in zip(props_nms, scores_nms):
+            bbox = toBbox(prop).tolist()
+            # TEST
+            for coord in bbox:
+                if coord < 0:
+                    raise Exception("coordinates should be strictly bigger than zero")
+            # END of TEST
+            output.append({'bbox': bbox, args.nms_criterion: prop, scoring: score})
+    elif args.nms_criterion == 'bbox':
+        for prop, score in zip(props_nms, scores_nms):
+            output.append({args.nms_criterion: prop, scoring: score})
+
 
     # Store proposals after NMS
     outdir = "/".join(outpath.split("/")[:-1])

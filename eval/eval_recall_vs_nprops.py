@@ -582,17 +582,17 @@ if __name__ == "__main__":
         raise Exception(FLAGS.recall_based_on, "is not a valid option, choose from [gt_bboxes, tracks]")
 
     if FLAGS.postNMS:
-        props_dirs = ["Panoptic_Cas_R101_NMSoff_(1-bg_score)",
-                      "Panoptic_Cas_R101_NMSoff_bg*rpn",
-                      "Panoptic_Cas_R101_NMSoff_bg+1000rpn",
-                      "Panoptic_Cas_R101_NMSoff_bgScore",
-                      "Panoptic_Cas_R101_NMSoff_objectness",
-                      "Panoptic_Cas_R101_NMSoff_Score"]
+        props_dirs = ["Panoptic_Cas_R101_NMSoff+objectness003_bg_rpn_product",
+                      "Panoptic_Cas_R101_NMSoff+objectness003_bg_rpn_sum",
+                      "Panoptic_Cas_R101_NMSoff+objectness003_bg_score",
+                      "Panoptic_Cas_R101_NMSoff+objectness003_objectness",
+                      "Panoptic_Cas_R101_NMSoff+objectness003_one_minus_bg_score",
+                      "Panoptic_Cas_R101_NMSoff+objectness003_score"]
     else:
         props_dirs = ["json"]
 
     props_dirs = [FLAGS.props_base_dir + p for p in props_dirs]
-    score_funcs = ["1-bgScore", "bg*rpn", "bg+rpn", "bgScore", "objectness", "score"]
+    score_funcs = ["bg*rpn", "bg+rpn", "bgScore", "objectness", "1-bgScore", "score"]
 
     if FLAGS.postNMS:
         for eval_dir, score_f in zip(props_dirs, score_funcs):
