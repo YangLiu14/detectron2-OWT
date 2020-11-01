@@ -198,7 +198,9 @@ def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
     # Class-agnostic fashion: does not output category id
     if args.nms_criterion == 'instance_mask':
         for prop, score in zip(props_nms, scores_nms):
-            bbox = toBbox(prop).tolist()
+            box = toBbox(prop).tolist()  # in [xc, yc, w, h]
+            # convert [xc, yc, w, h] to [x1, y1, x2, y2]
+            bbox = [box[0], box[1], box[0] + box[2], box[1] + box[3]]
             # TEST
             for coord in bbox:
                 if coord < 0:
