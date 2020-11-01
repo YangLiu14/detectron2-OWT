@@ -276,7 +276,7 @@ def remove_mask_overlap(proposals):
         refined_segmentation['counts'] = refined_segmentation['counts'].decode("utf-8")
         prop['instance_mask'] = refined_segmentation
         prop['bbox'] = toBbox(refined_segmentation)
-        # prop['mask'] = mask   # TODO: check if the mask if just numpy array, if so, we don't need
+        # prop['mask'] = mask
 
         selected_props.append(prop)
 
