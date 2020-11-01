@@ -10,6 +10,7 @@ import matplotlib
 import argparse
 import datetime
 import os
+import tqdm
 import re
 import time
 
@@ -183,7 +184,8 @@ def load_gt_categories(exclude_classes=(), ignored_sequences=(), prefix_dir_name
 
 def load_proposals(folder, gt, ignored_sequences=(), score_fnc=score_func):
     proposals = {}
-    for filename in gt.keys():
+    for filename in tqdm.tqdm(gt.keys()):
+
         if filename.split('/')[-3] != folder.split('/')[-1]:
             continue
         prop_filename = os.path.join(folder, "/".join(filename.split("/")[-2:]))
