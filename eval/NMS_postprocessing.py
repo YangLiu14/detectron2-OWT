@@ -130,6 +130,10 @@ def nms_mask(masks, confidence_score, threshold=0.5):
         # Pick the mask with largest confidence score
         picked_masks.append(remained_masks[index])
         picked_score.append(remained_scores[index])
+        remained_masks.pop(index)
+        remained_scores.pop(index)
+        if not remained_masks:
+            break
 
         # Compare the IoUs of the rest of the masks with current mask
         iscrowd_flags = [int(False)] * len(remained_masks)
@@ -137,8 +141,8 @@ def nms_mask(masks, confidence_score, threshold=0.5):
         ious = ious.squeeze()
 
         # # TEST
-        # ious2 = iou([picked_masks[-1]], remained_masks, [int(False)] * len(remained_masks))
-        # ious2 = ious2.squeeze()
+        # # ious2 = iou([picked_masks[-1]], remained_masks, [int(False)] * len(remained_masks))
+        # # ious2 = ious2.squeeze()
         #
         # ious_test = list()
         # curr_mask = decode(picked_masks[-1])
@@ -146,22 +150,11 @@ def nms_mask(masks, confidence_score, threshold=0.5):
         #     rest_mask = decode(rest_mask_rle)
         #     ious_test.append(compute_iou_for_binary_segmentation(curr_mask, rest_mask))
         # ious_test = np.array(ious_test)
-        # import pdb; pdb.set_trace()
+        #
+        # assert ious[ious.nonzero()].any() == ious_test[ious.nonzero()].any()
         # # END of TEST
 
         remained_idx = np.where(ious < threshold)[0]
-        if remained_idx.size == last_len:   # There are no masks overlap too much with the current one
-            print("Normally the code here should not be executed anymore, but let's test it.")
-            import pdb; pdb.set_trace()
-
-            remained_masks.pop(index)
-            remained_scores.pop(index)
-            score = np.array(remained_scores)
-            order = np.argsort(score)
-            last_len = remained_idx.size
-            if len(remained_masks) == 0:
-                break
-            continue
         if remained_idx.size == 0:
             # every mask in the remained_mask is invalid,
             # because they all overlap with current mask with IoU > threshold
