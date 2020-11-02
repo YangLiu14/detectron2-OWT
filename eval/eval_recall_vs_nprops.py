@@ -50,7 +50,6 @@ for coco_id, neighbor_ids in coco2neighbor_classes.items():
 # Exclude neighbor classes from unknown_tao_ids
 unknown_tao_ids = unknown_tao_ids.difference(neighbor_classes)
 
-
 # =======================================================
 # =======================================================
 
@@ -140,7 +139,8 @@ def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_la
             gt[fname]['bboxes'].append(bbox)
             gt[fname]['track_ids'].append(ann['track_id'])
 
-    n_boxes = sum([len(x) for x in gt.values()], 0)
+    n_boxes = sum([len(x['bboxes']) for x in gt.values()], 0)
+    assert n_boxes == nbox_ArgoVerse + nbox_BDD + nbox_Charades + nbox_LaSOT + nbox_YFCC100M
     print("number of gt boxes", n_boxes)
     nbox = {"ArgoVerse": nbox_ArgoVerse,
             "BDD": nbox_BDD,

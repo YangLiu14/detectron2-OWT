@@ -98,11 +98,10 @@ python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eva
                                 --nonOverlap \
                                 --do_not_timestamp
 # Post NMS
-python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/plot_output_postNMS_gtboxes/ \
-                                --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/postNMS_mask002/ \
+python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/NEWplot_output_postNMSonly_gtboxes/ \
+                                --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/postNMS_mask/ \
                                 --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
                                 --recall_based_on gt_bboxes \
-                                --nonOverlap \
                                 --postNMS --do_not_timestamp
 
 
@@ -134,6 +133,6 @@ python eval_recall_vs_NinTracks.py --plot_output_dir /storage/slurm/liuyang/TAO_
 python NMS_postprocessing.py --scorings "bg_score" "one_minus_bg_score" "objectness" "score"  "bg_rpn_sum" "bg_rpn_product" \
                              --nms_criterion instance_mask \
                              --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness003/json/ \
-                             --outdir "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/tmp_should_delete/Panoptic_Cas_R101_NMSoff+objectness003"
+                             --outdir "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/postNMS_mask003/Panoptic_Cas_R101_NMSoff+objectness003"
 
 
