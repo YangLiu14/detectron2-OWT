@@ -10,6 +10,16 @@ import warnings
 from pycocotools.mask import encode, decode, iou, toBbox
 
 
+def compute_iou_for_binary_segmentation(y_argmax, target):
+    I = np.logical_and(y_argmax == 1, target == 1).sum()
+    U = np.logical_or(y_argmax == 1, target == 1).sum()
+    if U == 0:
+        IOU = 1.0
+    else:
+        IOU = float(I) / U
+    return IOU
+
+
 # https://www.programmersought.com/article/97214443593/
 def nms_bbox(bounding_boxes, confidence_score, threshold=0.5):
     """
@@ -115,21 +125,35 @@ def nms_mask(masks, confidence_score, threshold=0.5):
     last_len = -1
     while True:
         # The index of largest confidence score
-        try:
-            index = order[-1]
-        except:
-            print("asd")
+        index = order[-1]
 
         # Pick the mask with largest confidence score
         picked_masks.append(remained_masks[index])
         picked_score.append(remained_scores[index])
 
         # Compare the IoUs of the rest of the masks with current mask
-        iscrowd_flags = [int(True)] * len(remained_masks)
-        ious = iou([picked_masks[-1]], remained_masks, pyiscrowd=iscrowd_flags)  # TODO: is pyiscrowd correctly set?
+        iscrowd_flags = [int(False)] * len(remained_masks)
+        ious = iou([picked_masks[-1]], remained_masks, pyiscrowd=iscrowd_flags)
         ious = ious.squeeze()
+
+        # # TEST
+        # ious2 = iou([picked_masks[-1]], remained_masks, [int(False)] * len(remained_masks))
+        # ious2 = ious2.squeeze()
+        #
+        # ious_test = list()
+        # curr_mask = decode(picked_masks[-1])
+        # for rest_mask_rle in remained_masks:
+        #     rest_mask = decode(rest_mask_rle)
+        #     ious_test.append(compute_iou_for_binary_segmentation(curr_mask, rest_mask))
+        # ious_test = np.array(ious_test)
+        # import pdb; pdb.set_trace()
+        # # END of TEST
+
         remained_idx = np.where(ious < threshold)[0]
         if remained_idx.size == last_len:   # There are no masks overlap too much with the current one
+            print("Normally the code here should not be executed anymore, but let's test it.")
+            import pdb; pdb.set_trace()
+
             remained_masks.pop(index)
             remained_scores.pop(index)
             score = np.array(remained_scores)
@@ -265,7 +289,7 @@ def process_one_frame_categorywise(seq: str, scoring: str, iou_thres: float, out
 
 def process_all_folders(root_dir: str, scoring: str, iou_thres: float, outdir: str):
     video_src_names = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(root_dir, '*')))]
-    print("Doing NMS for the following dataset: {}".format(video_src_names))
+    print(">>>>>>>>> Doing NMS for the following dataset: {}".format(video_src_names))
 
     for video_src in video_src_names:
         print("Processing", video_src)
@@ -299,5 +323,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     for scoring in args.scorings:
-        print("NMS using {}".format(scoring))
+        print(">>>>>>>>> NMS using {}".format(scoring))
         process_all_folders(args.inputdir, scoring, args.iou_thres, args.outdir)

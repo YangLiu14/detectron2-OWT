@@ -216,8 +216,21 @@ def load_proposals(folder, gt, ignored_sequences=(), score_fnc=score_func):
 
         if "bbox" in props[0]:
             bboxes = [prop["bbox"] for prop in props]
+            # TODO: this is temporary fix, should be deleted
+            for i in range(len(bboxes)):
+                box = bboxes[i]  # in the form of [xc, yc, w, h]
+                # convert [xc, yc, w, h] to [x1, y1, x2, y2]
+                bbox = [box[0], box[1], box[0] + box[2], box[1] + box[3]]
+                bboxes[i] = bbox
+            # END of should_be_deleted
         else:
             bboxes = [toBbox(prop["segmentation"]) for prop in props]
+            # The output box from cocoapi.mask.toBbox gives [xc, yc, w, h]
+            for i in range(len(bboxes)):
+                box = bboxes[i]  # in the form of [xc, yc, w, h]
+                # convert [xc, yc, w, h] to [x1, y1, x2, y2]
+                bbox = [box[0], box[1], box[0] + box[2], box[1] + box[3]]
+                bboxes[i] = bbox
 
         # convert from [x0, y0, w, h] (?) to [x0, y0, x1, y1]
         # bboxes = [[box[0], box[1], box[0] + box[2], box[1] + box[3]] for box in bboxes]
@@ -602,13 +615,13 @@ if __name__ == "__main__":
 
     if FLAGS.postNMS:
         for eval_dir, score_f in zip(props_dirs, score_funcs):
-            print("Processing", eval_dir)
+            print("(postNMS) Processing", eval_dir, "using", score_f)
             FLAGS.evaluate_dir = eval_dir
             FLAGS.score_func = score_f
             main()
     else:
         for score_f in score_funcs:
-            print("Processing", props_dirs[0])
+            print("Processing", props_dirs[0], "using", score_f)
             FLAGS.evaluate_dir = props_dirs[0]
             FLAGS.score_func = score_f
             main()
