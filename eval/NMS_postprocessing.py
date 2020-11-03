@@ -21,7 +21,7 @@ def compute_iou_for_binary_segmentation(y_argmax, target):
 
 
 # https://www.programmersought.com/article/97214443593/
-def nms_bbox(bounding_boxes, confidence_score, threshold=0.5):
+def nms_bbox(bounding_boxes, instance_masks, confidence_score, threshold=0.5):
     """
     Args:
         bounding_boxes: List, Object candidate bounding boxes
@@ -49,6 +49,7 @@ def nms_bbox(bounding_boxes, confidence_score, threshold=0.5):
 
     # Picked bounding boxes
     picked_boxes = []
+    picked_masks = []
     picked_score = []
 
     # Compute areas of bounding boxes
@@ -64,6 +65,7 @@ def nms_bbox(bounding_boxes, confidence_score, threshold=0.5):
 
         # Pick the bounding box with largest confidence score
         picked_boxes.append(bounding_boxes[index])
+        picked_masks.append(instance_masks[index])
         picked_score.append(confidence_score[index])
         a = start_x[index]
         b = order[:-1]
@@ -93,7 +95,7 @@ def nms_bbox(bounding_boxes, confidence_score, threshold=0.5):
     #         warnings.warn(msg)
     # # END of TEST
 
-    return picked_boxes, picked_score
+    return picked_boxes, picked_masks, picked_score
 
 
 def nms_mask(masks, confidence_score, threshold=0.5):
@@ -187,7 +189,9 @@ def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
         proposals = json.load(f)
 
     props_for_nms = dict()
-    props_for_nms['props'] = list()
+    # props_for_nms['props'] = list()
+    props_for_nms['bboxes'] = list()
+    props_for_nms['masks'] = list()
     props_for_nms['scores'] = list()
 
     for prop in proposals:
@@ -201,12 +205,14 @@ def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
         else:
             curr_score = prop[scoring]
 
-        props_for_nms['props'].append(prop[args.nms_criterion])
+        # props_for_nms['props'].append(prop[args.nms_criterion])
+        props_for_nms['bboxes'].append(prop['bbox'])
+        props_for_nms['masks'].append(prop['instance_mask'])
         props_for_nms['scores'].append(curr_score)
 
     output = list()
     if args.nms_criterion == 'bbox':
-        props_nms, scores_nms = nms_bbox(props_for_nms['props'], props_for_nms['scores'], iou_thres)
+        props_nms_box, props_nms_mask, scores_nms = nms_bbox(props_for_nms['bboxes'], props_for_nms['masks'], props_for_nms['scores'], iou_thres)
     elif args.nms_criterion == 'instance_mask':
         props_nms, scores_nms = nms_mask(props_for_nms['props'], props_for_nms['scores'], iou_thres)
     else:
@@ -225,9 +231,8 @@ def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
             # END of TEST
             output.append({'bbox': bbox, args.nms_criterion: prop, scoring: score})
     elif args.nms_criterion == 'bbox':
-        for prop, score in zip(props_nms, scores_nms):
-            output.append({args.nms_criterion: prop, scoring: score})
-
+        for box, mask, score in zip(props_nms_box, props_nms_mask, scores_nms):
+            output.append({'bbox': prop, 'instance_mask': mask, scoring: score})
 
     # Store proposals after NMS
     outdir = "/".join(outpath.split("/")[:-1])
