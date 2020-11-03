@@ -232,7 +232,7 @@ def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
             output.append({'bbox': bbox, args.nms_criterion: prop, scoring: score})
     elif args.nms_criterion == 'bbox':
         for box, mask, score in zip(props_nms_box, props_nms_mask, scores_nms):
-            output.append({'bbox': prop, 'instance_mask': mask, scoring: score})
+            output.append({'bbox': box, 'instance_mask': mask, scoring: score})
 
     # Store proposals after NMS
     outdir = "/".join(outpath.split("/")[:-1])

@@ -514,17 +514,17 @@ def evaluate_all_folders_oxford(gt, plot_title, n_subset_gt_boxes, user_specifie
 def eval_recall_oxford(output_dir):
     # +++ Most common categories +++
     # print("evaluating car, bike, person, bus:")
-    print("evaluating coco 78 classes without hot_dog and oven:")
-    exclude_classes = tuple(unknown_tao_ids.union(neighbor_classes))
-    # ignored_seq = ("BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA")
+    # print("evaluating coco 78 classes without hot_dog and oven:")
+    # exclude_classes = tuple(unknown_tao_ids.union(neighbor_classes))
+    # # ignored_seq = ("BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA")
     ignored_seq = ("HACS", "AVA")
-    gt, n_gt_boxes, n_subset_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
-    # gt, n_gt_boxes = load_gt_oxford(exclude_classes, prefix_dir_name=FLAGS.labels)
-
-    evaluate_all_folders_oxford(gt, "COCO known classes (" + str(n_gt_boxes) + " bounding boxes)",
-                                n_subset_gt_boxes=n_subset_gt_boxes,
-                                output_dir=output_dir,
-                                user_specified_result_dir=FLAGS.evaluate_dir)
+    # gt, n_gt_boxes, n_subset_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
+    # # gt, n_gt_boxes = load_gt_oxford(exclude_classes, prefix_dir_name=FLAGS.labels)
+    #
+    # evaluate_all_folders_oxford(gt, "COCO known classes (" + str(n_gt_boxes) + " bounding boxes)",
+    #                             n_subset_gt_boxes=n_subset_gt_boxes,
+    #                             output_dir=output_dir,
+    #                             user_specified_result_dir=FLAGS.evaluate_dir)
 
     # +++ "neighbor" categories +++
     print("evaluating neighbor classes:")
@@ -620,19 +620,26 @@ if __name__ == "__main__":
             main()
 
     # Combine the images
+    # image_paths = ["COCOunknownclasses_score.png", "COCOunknownclasses_bgScore.png", "COCOunknownclasses_1-bgScore.png",
+    #                "COCOunknownclasses_objectness.png", "COCOunknownclasses_bg+rpn.png",
+    #                "COCOunknownclasses_bg*rpn.png",
+    #                "COCOneighborclasses_score.png", "COCOneighborclasses_bgScore.png",
+    #                "COCOneighborclasses_1-bgScore.png", "COCOneighborclasses_objectness.png",
+    #                "COCOneighborclasses_bg+rpn.png", "COCOneighborclasses_bg*rpn.png",
+    #                "COCOknownclasses_score.png", "COCOknownclasses_bgScore.png", "COCOknownclasses_1-bgScore.png",
+    #                "COCOknownclasses_objectness.png", "COCOknownclasses_bg+rpn.png", "COCOknownclasses_bg*rpn.png"]
     image_paths = ["COCOunknownclasses_score.png", "COCOunknownclasses_bgScore.png", "COCOunknownclasses_1-bgScore.png",
                    "COCOunknownclasses_objectness.png", "COCOunknownclasses_bg+rpn.png",
                    "COCOunknownclasses_bg*rpn.png",
                    "COCOneighborclasses_score.png", "COCOneighborclasses_bgScore.png",
                    "COCOneighborclasses_1-bgScore.png", "COCOneighborclasses_objectness.png",
-                   "COCOneighborclasses_bg+rpn.png", "COCOneighborclasses_bg*rpn.png",
-                   "COCOknownclasses_score.png", "COCOknownclasses_bgScore.png", "COCOknownclasses_1-bgScore.png",
-                   "COCOknownclasses_objectness.png", "COCOknownclasses_bg+rpn.png", "COCOknownclasses_bg*rpn.png"]
+                   "COCOneighborclasses_bg+rpn.png", "COCOneighborclasses_bg*rpn.png"]
     root_dir = FLAGS.plot_output_dir
     image_paths = [root_dir + i for i in image_paths]
 
     output_path = FLAGS.plot_output_dir + "combined.png"
-    image_stitching(image_paths, 6, 3, output_path)
+    # image_stitching(image_paths, 6, 3, output_path)
+    image_stitching(image_paths, 6, 2, output_path)
 
     # Delete the images
     print("Deleting images")
