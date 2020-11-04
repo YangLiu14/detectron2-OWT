@@ -282,6 +282,8 @@ def remove_mask_overlap(proposals):
     selected_props = []
     for prop, refined_segmentation, mask in zip(proposals, refined_segmentations, refined_masks):
         refined_segmentation['counts'] = refined_segmentation['counts'].decode("utf-8")
+        if area(refined_segmentation) == 0:
+            continue
         prop['instance_mask'] = refined_segmentation
         box = toBbox(refined_segmentation).tolist()  # in the form of [xc, yc, w, h]
         # convert [xc, yc, w, h] to [x1, y1, x2, y2]
