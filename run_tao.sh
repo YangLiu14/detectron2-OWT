@@ -105,10 +105,11 @@ python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eva
                                 --nonOverlap \
                                 --postNMS --do_not_timestamp
 
-python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/TheRecall_on_Detections_postNMSonly/ \
+python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/NEWplot_boxNMS+nonOverlapBbox_gtboxes/ \
                                 --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/postNMS_bbox/ \
                                 --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
                                 --recall_based_on gt_bboxes \
+                                --nonOverlap \
                                 --postNMS --do_not_timestamp
 
 
@@ -118,13 +119,13 @@ python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eva
                                 --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness003/ \
                                 --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
                                 --recall_based_on tracks \
-                                --nonOverlap \
                                 --do_not_timestamp
 # Post NMS
-python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/plot_output_postNMSonly_tracks/ \
-                                --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/postNMS_mask002/ \
+python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/NEWplot_boxNMS+nonOverlap_tracks/ \
+                                --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/postNMS_bbox/ \
                                 --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
                                 --recall_based_on tracks \
+                                --nonOverlap \
                                 --postNMS --do_not_timestamp
 
 # Keep 1000 proposals invariant, and vary N from 1 to 100
