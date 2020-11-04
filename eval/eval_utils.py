@@ -60,13 +60,6 @@ def mask2polygon(mask):
 
     return segmentation
 
-def mask2RLE(mask):
-    """Convert binary mask to RLE format
-    :param mask: numpy array
-    :return:
-    """
-
-
 
 def store_coco(predictions, input_img_path: str, valid_classes: List[int], json_outdir: str):
     frame_name = input_img_path.split('/')[-1].replace('.jpg', '.json')
