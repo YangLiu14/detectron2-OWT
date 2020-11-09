@@ -140,7 +140,7 @@ def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_la
             gt[fname]['bboxes'].append(bbox)
             gt[fname]['track_ids'].append(ann['track_id'])
 
-    n_boxes = sum([len(x) for x in gt.values()], 0)
+    n_boxes = sum([len(x['bboxes']) for x in gt.values()], 0)
     print("number of gt boxes", n_boxes)
     nbox = {"ArgoVerse": nbox_ArgoVerse,
             "BDD": nbox_BDD,
@@ -368,6 +368,11 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
         all_track_ids.append(track_ids)
     all_ious = np.concatenate(all_ious)
     all_track_ids = np.concatenate(all_track_ids)
+    # Calculate the track-length of each track id
+    gt_track_len = Counter()
+    for t_id in all_track_ids:
+        gt_track_len[t_id] += 1
+
     if IOU_THRESHOLD is None:
         iou_curve = [0.0 if n_max == 0 else all_ious[:, :n_max].max(axis=1).mean() for n_max in
                      range(0, n_max_proposals + 1)]
@@ -379,7 +384,7 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
         elif FLAGS.recall_based_on == "tracks":
             iou_curve = list()
             # N here means: we only consider a track is successfully recalled,
-            # when there are at least N objects in this track are detected.
+            # when there are at least N% of objects in this track are detected.
             for N in range(1, 101):
                 mask = (all_ious[:, :1000].max(axis=1) > IOU_THRESHOLD)
                 recalled_track_ids = all_track_ids[mask]
@@ -392,7 +397,9 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
 
                 recalled_track_ids = list()
                 for t_id, cnt in track_id2cnt.items():
-                    if cnt >= N:
+                    gt_len = gt_track_len[t_id]  # length of the gt_track
+                    assert cnt <= gt_len
+                    if cnt / gt_len * 100 >= N:
                         recalled_track_ids.append(t_id)
 
                 ratio = len(set(recalled_track_ids)) / len(set(all_track_ids))
