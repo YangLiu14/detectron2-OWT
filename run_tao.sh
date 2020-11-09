@@ -121,11 +121,10 @@ python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eva
                                 --recall_based_on tracks \
                                 --do_not_timestamp
 # Post NMS
-python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/NEWplot_boxNMS+nonOverlap_tracks/ \
+python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/NEWplot_boxNMSonly_tracks/ \
                                 --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/postNMS_bbox/ \
                                 --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
                                 --recall_based_on tracks \
-                                --nonOverlap \
                                 --postNMS --do_not_timestamp
 
 # Keep 1000 proposals invariant, and vary N from 1 to 100
