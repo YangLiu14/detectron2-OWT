@@ -213,6 +213,8 @@ def load_proposals(folder, gt, ignored_sequences=(), score_fnc=score_func):
         props = sorted(props, key=score_fnc, reverse=True)
         if FLAGS.nonOverlap:
             props = remove_mask_overlap(props)
+        if FLAGS.nonOverlap_small:
+            props = remove_mask_overlap_small_on_top(props)
 
         if "bbox" in props[0]:
             bboxes = [prop["bbox"] for prop in props]
@@ -274,6 +276,57 @@ def remove_mask_overlap(proposals):
 
     # Put the mask there in reversed order, so that the latter one would just cover the previous one,
     # and the latter one has higher score. (Because proposals are sorted)
+    for i in reversed(range(len(proposals))):
+        png[masks[i].astype("bool")] = labels[i]
+
+    refined_masks = [(png == id_).astype(np.uint8) for id_ in labels]
+    refined_segmentations = [encode(np.asfortranarray(refined_mask)) for refined_mask in refined_masks]
+    selected_props = []
+    for prop, refined_segmentation, mask in zip(proposals, refined_segmentations, refined_masks):
+        refined_segmentation['counts'] = refined_segmentation['counts'].decode("utf-8")
+        if area(refined_segmentation) == 0:
+            continue
+        prop['instance_mask'] = refined_segmentation
+        box = toBbox(refined_segmentation).tolist()  # in the form of [xc, yc, w, h]
+        # convert [xc, yc, w, h] to [x1, y1, x2, y2]
+        bbox = [box[0], box[1], box[0] + box[2], box[1] + box[3]]
+        prop['bbox'] = bbox
+        # prop['mask'] = mask
+
+        selected_props.append(prop)
+
+    return selected_props
+
+
+def remove_mask_overlap_small_on_top(proposals):
+    """
+    Similar with `remove_mask_overlap`, but instead of putting masks with higher scores on top,
+    put masks with smaller area on top.
+
+    Args:
+        proposals: List[Dict], sorted proposals according specific scoring criterion. Each proposal contains:
+        {
+            category_id: int,
+            bbox: [x1, y1, x2, y2],
+            score: float (could be named differently, e.g. bg_score, objectness, etc)
+            instance_mask: COCO_RLE format,
+        }
+
+    Returns:
+        selected_props, List[Dict]
+    """
+    # Sort proposals by it's area.
+    # all_areas = [area(prop['instance_mask']) for prop in proposals]
+    proposals.sort(key=lambda prop: area(prop['instance_mask']))
+    # all_areas2 = [area(prop['instance_mask']) for prop in proposals]
+
+    masks = [decode(prop['instance_mask']) for prop in proposals]
+    idx = [i for i in range(len(proposals))]
+    labels = np.arange(1, len(proposals) + 1)
+    png = np.zeros_like(masks[0])
+
+    # Put the mask there in reversed order, so that the latter one would just cover the previous one,
+    # and the latter one has smaller scores. (Because proposals are sorted by area)
     for i in reversed(range(len(proposals))):
         png[masks[i].astype("bool")] = labels[i]
 
@@ -585,18 +638,23 @@ if __name__ == "__main__":
                                                        '[score, bg_score, 1-bg_score, rpn, bg+rpn, bg*rpn]')
     parser.add_argument('--postNMS', action='store_true', help='processing postNMS proposals.')
     parser.add_argument('--nonOverlap', action='store_true', help='Filter out the overlapping bboxes in proposals')
+    parser.add_argument('--nonOverlap_small', action='store_true', help='Filter out the overlapping bboxes in proposals')
     parser.add_argument('--do_not_timestamp', action='store_true', help='Dont timestamp output dirs')
 
     FLAGS = parser.parse_args()
 
     # Check args
+    if FLAGS.nonOverlap:
+        print(">>> non-overlap (higher confidence mask on top)")
+    if FLAGS.nonOverlap_small:
+        print(">>> non-overlap (smaller mask on top")
     if FLAGS.recall_based_on not in ['gt_bboxes', 'tracks']:
         raise Exception(FLAGS.recall_based_on, "is not a valid option, choose from [gt_bboxes, tracks]")
 
     if FLAGS.postNMS:
-        props_dirs = ["Panoptic_Cas_R101_NMSoff+objectness003_bg_rpn_product",
+        props_dirs = ["Panoptic_Cas_R101_NMSoff+objectness003_bg_score",
+                      "Panoptic_Cas_R101_NMSoff+objectness003_bg_rpn_product",
                       "Panoptic_Cas_R101_NMSoff+objectness003_bg_rpn_sum",
-                      "Panoptic_Cas_R101_NMSoff+objectness003_bg_score",
                       "Panoptic_Cas_R101_NMSoff+objectness003_objectness",
                       "Panoptic_Cas_R101_NMSoff+objectness003_one_minus_bg_score",
                       "Panoptic_Cas_R101_NMSoff+objectness003_score"]
@@ -604,7 +662,7 @@ if __name__ == "__main__":
         props_dirs = ["json"]
 
     props_dirs = [FLAGS.props_base_dir + p for p in props_dirs]
-    score_funcs = ["bg*rpn", "bg+rpn", "bgScore", "objectness", "1-bgScore", "score"]
+    score_funcs = ["bgScore", "bg*rpn", "bg+rpn", "objectness", "1-bgScore", "score"]
 
     if FLAGS.postNMS:
         for eval_dir, score_f in zip(props_dirs, score_funcs):
@@ -614,7 +672,7 @@ if __name__ == "__main__":
             main()
     else:
         for score_f in score_funcs:
-            print("Processing", props_dirs[0], "using", score_f)
+            print("(normal NMS) Processing", props_dirs[0], "using", score_f)
             FLAGS.evaluate_dir = props_dirs[0]
             FLAGS.score_func = score_f
             main()
