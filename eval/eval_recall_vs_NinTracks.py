@@ -384,7 +384,7 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
         elif FLAGS.recall_based_on == "tracks":
             iou_curve = list()
             # N here means: we only consider a track is successfully recalled,
-            # when there are at least N% of objects in this track are detected.
+            # when there are at least % of objects in this track are detected.
             for N in range(1, 101):
                 mask = (all_ious[:, :1000].max(axis=1) > IOU_THRESHOLD)
                 recalled_track_ids = all_track_ids[mask]
@@ -462,7 +462,7 @@ def make_plot(export_dict, plot_title, x_vals, linewidth=5):
     ax = plt.gca()
     ax.set_yticks(np.arange(0, 1.2, 0.2))
     ax.set_xticks(np.asarray([5, 10, 20, 30, 50, 70, 90, 100]))
-    plt.xlabel("At Least N detections in one track {}".format(FLAGS.score_func))
+    plt.xlabel("At Least N\% detections in one track {}".format(FLAGS.score_func))
     plt.ylabel("Recall")
     ax.set_ylim([0.0, 1.0])
     plt.legend(prop={"size": 8})
