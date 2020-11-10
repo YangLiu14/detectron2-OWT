@@ -729,3 +729,8 @@ if __name__ == "__main__":
             FLAGS.evaluate_dir = props_dirs[0]
             FLAGS.score_func = score_f
             main()
+
+    # Post-processing of the json files
+    for data_type in ['unknown', 'neighbor']:
+        pass
+

@@ -215,6 +215,7 @@ def load_proposals(folder, gt, ignored_sequences=(), score_fnc=score_func):
             props = remove_mask_overlap(props)
         if FLAGS.nonOverlap_small:
             props = remove_mask_overlap_small_on_top(props)
+        props = sorted(props, key=score_fnc, reverse=True)
 
         if "bbox" in props[0]:
             bboxes = [prop["bbox"] for prop in props]
