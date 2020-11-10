@@ -14,6 +14,7 @@ import tqdm
 import re
 import time
 
+from collections import Counter
 from pycocotools.mask import toBbox, encode, decode, area
 from sklearn import metrics
 from typing import List, Dict
@@ -132,10 +133,10 @@ def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_la
         box = (xc, yc, w, h)
         bbox = [box[0], box[1], box[0] + box[2], box[1] + box[3]]
         if fname not in gt.keys():
-            gt[fname] = {'bboxes': [], 'track_ids': []}
+            gt[fname] = {'bboxes': [], 'track_ids': [], 'category_ids': []}
         gt[fname]['bboxes'].append(bbox)
         gt[fname]['track_ids'].append(ann['track_id'])
-        gt[fname]['category_ids'].append(ann['category_ids'])
+        gt[fname]['category_ids'].append(ann['category_id'])
 
     n_boxes = sum([len(x['bboxes']) for x in gt.values()], 0)
     assert n_boxes == nbox_ArgoVerse + nbox_BDD + nbox_Charades + nbox_LaSOT + nbox_YFCC100M
@@ -403,29 +404,10 @@ def calculate_ious(bboxes1, bboxes2):
     return IOUs
 
 
-def calculate_ious_category_aware(bboxes1, bboxes2, gt_category_ids):
-    """
-    :param bboxes1: Kx4 matrix, assume layout (x0, y0, x1, y1)
-    :param bboxes2: Nx$ matrix, assume layout (x0, y0, x1, y1)
-    :param gt_category_ids: Nx1 matrix, corresponding to the category of each box in bboxes1
-    :return: KxN matrix of IoUs
-    """
-    min_ = np.minimum(bboxes1[:, np.newaxis, :], bboxes2[np.newaxis, :, :])
-    max_ = np.maximum(bboxes1[:, np.newaxis, :], bboxes2[np.newaxis, :, :])
-    I = np.maximum(min_[..., 2] - max_[..., 0], 0) * np.maximum(min_[..., 3] - max_[..., 1], 0)
-    area1 = (bboxes1[..., 2] - bboxes1[..., 0]) * (bboxes1[..., 3] - bboxes1[..., 1])
-    area2 = (bboxes2[..., 2] - bboxes2[..., 0]) * (bboxes2[..., 3] - bboxes2[..., 1])
-    U = area1[:, np.newaxis] + area2[np.newaxis, :] - I
-    assert (U > 0).all()
-    IOUs = I / U
-    assert (IOUs >= 0).all()
-    assert (IOUs <= 1).all()
-    return IOUs
-
-
 def evaluate_proposals(gt, props, n_max_proposals=1000):
     all_ious = []  # ious for all frames
     all_track_ids = []
+    all_cat_ids = []
     for img, img_gt in gt.items():
         if len(img_gt) == 0:
             continue
@@ -442,67 +424,83 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
         # Proposals
         prop_bboxes = np.array(img_props)
 
-        # ious = calculate_ious(gt_bboxes, prop_bboxes)
-        ious = calculate_ious_category_aware(gt_bboxes, prop_bboxes, category_ids)
+        ious = calculate_ious(gt_bboxes, prop_bboxes)
+        # ious = calculate_ious_category_aware(gt_bboxes, prop_bboxes, category_ids)
 
         # pad to n_max_proposals
         ious_padded = np.zeros((ious.shape[0], n_max_proposals))
         ious_padded[:, :ious.shape[1]] = ious[:, :n_max_proposals]
         all_ious.append(ious_padded)
         all_track_ids.append(track_ids)
+        all_cat_ids.append(category_ids)
     all_ious = np.concatenate(all_ious)
     all_track_ids = np.concatenate(all_track_ids)
-    if IOU_THRESHOLD is None:
-        iou_curve = [0.0 if n_max == 0 else all_ious[:, :n_max].max(axis=1).mean() for n_max in
-                     range(0, n_max_proposals + 1)]
-    else:
-        assert 0 <= IOU_THRESHOLD <= 1
-        if FLAGS.recall_based_on == "gt_bboxes":
-            iou_curve = [0.0 if n_max == 0 else (all_ious[:, :n_max].max(axis=1) > IOU_THRESHOLD).mean() for n_max in
-                         range(0, n_max_proposals + 1)]
-        elif FLAGS.recall_based_on == "tracks":
-            iou_curve = list()
-            for n_max in range(0, n_max_proposals + 1):
-                if n_max == 0:
-                    iou_curve.append(0.0)
-                else:
-                    mask = (all_ious[:, :n_max].max(axis=1) > IOU_THRESHOLD)
-                    recalled_track_ids = all_track_ids[mask]
-                    ratio = len(set(recalled_track_ids)) / len(set(all_track_ids))
-                    iou_curve.append(ratio)
-        else:
-            raise Exception(FLAGS.recall_based_on, "is not a valid option, choose from [gt_bboxes, tracks]")
+    all_cat_ids = np.concatenate(all_cat_ids)
 
-    return iou_curve
+    assert 0 <= IOU_THRESHOLD <= 1
+    # iou_curve = [0.0 if n_max == 0 else (all_ious[:, :n_max].max(axis=1) > IOU_THRESHOLD).mean() for n_max in
+    #              range(0, n_max_proposals + 1)]
+    mask = (all_ious.max(axis=1) > IOU_THRESHOLD)
+    recalled_cat_ids = all_cat_ids[mask]
+
+    # Count the percentage of each category been recalled
+    gt_cat2count = Counter()
+    for cat_id in all_cat_ids:
+        gt_cat2count[cat_id] += 1
+
+    recalled_cat2count = Counter()
+    for cat_id in recalled_cat_ids:
+        recalled_cat2count[cat_id] += 1
+
+    cat_id2ratio = dict()
+    for cat_id, cnt in gt_cat2count.items():
+        if cat_id in recalled_cat2count.keys():
+            cat_id2ratio[cat_id] = recalled_cat2count[cat_id] / gt_cat2count[cat_id]
+        else:
+            cat_id2ratio[cat_id] = 0
+
+    return cat_id2ratio
 
 
 def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=score_func):
-    props = load_proposals(folder, gt, ignored_sequences=ignored_sequences, score_fnc=score_fnc)
+    props_postNMS = load_proposals(folder, gt, ignored_sequences=ignored_sequences, score_fnc=score_fnc)
+    FLAGS.nonOverlap = True
+    props_nonOverlap = load_proposals(folder, gt, ignored_sequences=ignored_sequences, score_fnc=score_fnc)
+    FLAGS.nonOverlap = False
+    FLAGS.nonOverlap_small = True
+    props_nonOverlap_small = load_proposals(folder, gt, ignored_sequences=ignored_sequences, score_fnc=score_fnc)
+    # reset
+    FLAGS.nonOverlap = False
+    FLAGS.nonOverlap_small = False
 
-    iou_curve = evaluate_proposals(gt, props)
+    cat_id2ratio_postNMS = evaluate_proposals(gt, props_postNMS)
+    cat_id2ratio_nonOverlap = evaluate_proposals(gt, props_nonOverlap)
+    cat_id2ratio_nonOverlap_small = evaluate_proposals(gt, props_nonOverlap_small)
 
-    iou_50 = iou_curve[50]
-    iou_100 = iou_curve[100]
-    iou_150 = iou_curve[150]
-    iou_200 = iou_curve[200]
-    iou_700 = iou_curve[700]
-    iou_900 = iou_curve[900]
-    iou_1k = iou_curve[1000]
+    # Calculate recall drop
+    # non-overlap using higher-confidence-score-mask on top
+    recall_drop_nonOverlap = dict()
+    for cat_id, ratio in cat_id2ratio_postNMS.items():
+        if cat_id in cat_id2ratio_nonOverlap.keys():
+            recall_drop_nonOverlap[str(cat_id)] = cat_id2ratio_postNMS[cat_id] - cat_id2ratio_nonOverlap[cat_id]
+        else:
+            recall_drop_nonOverlap[str(cat_id)] = cat_id2ratio_postNMS[cat_id] - 0
 
-    end_iou = iou_curve[-1]
+    # non-overlap using smaller-area-mask on top
+    recall_drop_nonOverlap_small = dict()
+    for cat_id, ratio in cat_id2ratio_postNMS.items():
+        if cat_id in cat_id2ratio_nonOverlap_small.keys():
+            recall_drop_nonOverlap_small[str(cat_id)] = cat_id2ratio_postNMS[cat_id] - cat_id2ratio_nonOverlap_small[cat_id]
+        else:
+            recall_drop_nonOverlap_small[str(cat_id)] = cat_id2ratio_postNMS[cat_id] - 0
 
     method_name = os.path.basename(os.path.dirname(folder + "/"))
+    print("non-overlap recall drop:")
+    print(recall_drop_nonOverlap)
+    print("---------------------------------------------")
+    print(recall_drop_nonOverlap_small)
 
-    print("%s: R50: %1.2f, R100: %1.2f, R150: %1.2f, R200: %1.2f, R700: %1.2f, R_total: %1.2f" %
-          (method_name,
-           iou_50,
-           iou_100,
-           iou_150,
-           iou_200,
-           iou_700,
-           end_iou))
-
-    return iou_curve
+    return recall_drop_nonOverlap, recall_drop_nonOverlap_small
 
 
 def title_to_filename(plot_title):
@@ -553,9 +551,7 @@ def evaluate_all_folders_oxford(gt, plot_title, n_subset_gt_boxes, user_specifie
     print("----------- Evaluate Oxford Recall -----------")
 
     # Export dict
-    export_dict = {
-
-    }
+    export_dict = {}
 
     # +++ User-specified +++
     user_specified_results = None
@@ -563,8 +559,10 @@ def evaluate_all_folders_oxford(gt, plot_title, n_subset_gt_boxes, user_specifie
         dirs = os.listdir(user_specified_result_dir)
         dirs.sort()
 
-        # ignore_dirs = ["BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA"]
         ignore_dirs = ["HACS", "AVA"]
+
+        all_recall_drop_nonOverlap = dict()
+        all_recall_drop_nonOverlap_small = dict()
         for mydir in dirs:
             if mydir[0] == '.':
                 continue  # Filter out `.DS_Store` and `._.DS_Store`
@@ -572,19 +570,51 @@ def evaluate_all_folders_oxford(gt, plot_title, n_subset_gt_boxes, user_specifie
                 continue
 
             print("---Eval: %s ---" % mydir)
-            user_specified_results = evaluate_folder(gt, os.path.join(user_specified_result_dir, mydir))
-            # export_dict[mydir] = user_specified_results
-            export_dict[mydir] = dict()
-            export_dict[mydir]['data'] = user_specified_results
-            export_dict[mydir]['nbox_gt'] = n_subset_gt_boxes[mydir]
+            results = evaluate_folder(gt, os.path.join(user_specified_result_dir, mydir))
+            recall_drop_nonOverlap, recall_drop_nonOverlap_small = results
 
-    x_vals = range(1001)
+            # Add to all
+            for cat_id, drop in recall_drop_nonOverlap.items():
+                if str(cat_id) not in all_recall_drop_nonOverlap.keys():
+                    all_recall_drop_nonOverlap[str(cat_id)] = []
+                all_recall_drop_nonOverlap[str(cat_id)].append(drop)
 
-    # Plot everything specified via export_dict
-    make_plot(export_dict, plot_title, x_vals)
+            for cat_id, drop in recall_drop_nonOverlap_small.items():
+                if str(cat_id) not in all_recall_drop_nonOverlap_small.keys():
+                    all_recall_drop_nonOverlap_small[str(cat_id)] = []
+                all_recall_drop_nonOverlap_small[str(cat_id)].append(drop)
 
-    # Export figs, csv
-    export_figs(export_dict, plot_title, output_dir, x_vals)
+            # Write to json file
+            json_path = os.path.join(output_dir, plot_title, plot_title + "_" + mydir + "_" + FLAGS.score_func + ".json")
+            if not os.path.exists(os.path.join(output_dir, plot_title)):
+                os.makedirs(os.path.join(output_dir, plot_title))
+
+            res = {"score_top": recall_drop_nonOverlap,
+                   "area_top": recall_drop_nonOverlap_small}
+
+            with open(json_path, 'w') as f:
+                json.dump(res, f)
+
+            print("DONE")
+
+            # # export_dict[mydir] = user_specified_results
+            # export_dict[mydir] = dict()
+            # export_dict[mydir]['data'] = user_specified_results
+            # export_dict[mydir]['nbox_gt'] = n_subset_gt_boxes[mydir]
+
+        for cat_id, drop_list in all_recall_drop_nonOverlap.items():
+            all_recall_drop_nonOverlap[cat_id] = sum(drop_list) / len(drop_list)
+        for cat_id, drop_list in all_recall_drop_nonOverlap_small.items():
+            all_recall_drop_nonOverlap_small[cat_id] = sum(drop_list) / len(drop_list)
+
+        json_path1 = os.path.join(output_dir, plot_title, plot_title + "_allNonOverlap" + "_" + FLAGS.score_func + ".json")
+        json_path2 = os.path.join(output_dir, plot_title, plot_title + "_allNonOverlapSmall" + "_" + FLAGS.score_func + ".json")
+        with open(json_path1, 'w') as f:
+            json.dump(all_recall_drop_nonOverlap, f)
+        with open(json_path2, 'w') as f:
+            json.dump(all_recall_drop_nonOverlap_small, f)
+
+    print("DONE")
 
 
 def eval_recall_oxford(output_dir):
@@ -596,7 +626,7 @@ def eval_recall_oxford(output_dir):
     exclude_classes = tuple(known_tao_ids.union(neighbor_classes))
     gt, n_gt_boxes, n_subset_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
 
-    evaluate_all_folders_oxford(gt, "COCO unknown classes (" + str(n_gt_boxes) + " bounding boxes)",
+    evaluate_all_folders_oxford(gt, "unknown",
                                 n_subset_gt_boxes=n_subset_gt_boxes,
                                 output_dir=output_dir,
                                 user_specified_result_dir=FLAGS.evaluate_dir)
@@ -611,18 +641,16 @@ def eval_recall_oxford(output_dir):
                                 output_dir=output_dir,
                                 user_specified_result_dir=FLAGS.evaluate_dir)
 
-    # +++ "known" categories +++
-    print("evaluating coco 78 classes without hot_dog and oven:")
-    exclude_classes = tuple(unknown_tao_ids.union(neighbor_classes))
-    gt, n_gt_boxes, n_subset_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
-    # gt, n_gt_boxes = load_gt_oxford(exclude_classes, prefix_dir_name=FLAGS.labels)
-
-    evaluate_all_folders_oxford(gt, "COCO known classes (" + str(n_gt_boxes) + " bounding boxes)",
-                                n_subset_gt_boxes=n_subset_gt_boxes,
-                                output_dir=output_dir,
-                                user_specified_result_dir=FLAGS.evaluate_dir)
-
-
+    # # +++ "known" categories +++
+    # print("evaluating coco 78 classes without hot_dog and oven:")
+    # exclude_classes = tuple(unknown_tao_ids.union(neighbor_classes))
+    # gt, n_gt_boxes, n_subset_gt_boxes = load_gt(exclude_classes, ignored_seq, prefix_dir_name=FLAGS.labels)
+    # # gt, n_gt_boxes = load_gt_oxford(exclude_classes, prefix_dir_name=FLAGS.labels)
+    #
+    # evaluate_all_folders_oxford(gt, "COCO known classes (" + str(n_gt_boxes) + " bounding boxes)",
+    #                             n_subset_gt_boxes=n_subset_gt_boxes,
+    #                             output_dir=output_dir,
+    #                             user_specified_result_dir=FLAGS.evaluate_dir)
 
 
 def main():
@@ -701,30 +729,3 @@ if __name__ == "__main__":
             FLAGS.evaluate_dir = props_dirs[0]
             FLAGS.score_func = score_f
             main()
-
-    # Combine the images
-    image_paths = ["COCOunknownclasses_score.png", "COCOunknownclasses_bgScore.png", "COCOunknownclasses_1-bgScore.png",
-                   "COCOunknownclasses_objectness.png", "COCOunknownclasses_bg+rpn.png",
-                   "COCOunknownclasses_bg*rpn.png",
-                   "COCOneighborclasses_score.png", "COCOneighborclasses_bgScore.png",
-                   "COCOneighborclasses_1-bgScore.png", "COCOneighborclasses_objectness.png",
-                   "COCOneighborclasses_bg+rpn.png", "COCOneighborclasses_bg*rpn.png",
-                   "COCOknownclasses_score.png", "COCOknownclasses_bgScore.png", "COCOknownclasses_1-bgScore.png",
-                   "COCOknownclasses_objectness.png", "COCOknownclasses_bg+rpn.png", "COCOknownclasses_bg*rpn.png"]
-    # image_paths = ["COCOunknownclasses_score.png", "COCOunknownclasses_bgScore.png", "COCOunknownclasses_1-bgScore.png",
-    #                "COCOunknownclasses_objectness.png", "COCOunknownclasses_bg+rpn.png",
-    #                "COCOunknownclasses_bg*rpn.png",
-    #                "COCOneighborclasses_score.png", "COCOneighborclasses_bgScore.png",
-    #                "COCOneighborclasses_1-bgScore.png", "COCOneighborclasses_objectness.png",
-    #                "COCOneighborclasses_bg+rpn.png", "COCOneighborclasses_bg*rpn.png"]
-    root_dir = FLAGS.plot_output_dir
-    image_paths = [root_dir + i for i in image_paths]
-
-    output_path = FLAGS.plot_output_dir + "combined.png"
-    image_stitching(image_paths, 6, 3, output_path)
-    # image_stitching(image_paths, 6, 2, output_path)
-
-    # Delete the images
-    print("Deleting images")
-    for ip in image_paths:
-        os.remove(ip)
