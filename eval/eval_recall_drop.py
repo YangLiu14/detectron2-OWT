@@ -20,6 +20,7 @@ from sklearn import metrics
 from typing import List, Dict
 from eval.eval_utils import image_stitching
 
+
 # =======================================================
 # Global variables
 # =======================================================
@@ -674,6 +675,86 @@ def main():
         eval_recall_oxford(output_dir=output_dir)
 
 
+def plot_bar(x_labels: List[str], y1: List[float], y2: List[float], plotname: str, outdir: str):
+    labels = x_labels
+
+    x = np.arange(len(labels))  # the label locations
+    width = 0.35  # the width of the bars
+
+    fig, ax = plt.subplots()
+    rects1 = ax.bar(x - width / 2, y1, width, label='non-overlap score_based')
+    rects2 = ax.bar(x + width / 2, y2, width, label='non-overlap area_based')
+
+    # Add some text for labels, title and custom x-axis tick labels, etc.
+    ax.set_ylabel('Recall drops')
+    ax.set_title(plotname.split(".")[0])
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.legend()
+
+    def autolabel(rects):
+        """Attach a text label above each bar in *rects*, displaying its height."""
+        for rect in rects:
+            height = rect.get_height()
+            ax.annotate('{}'.format(height),
+                        xy=(rect.get_x() + rect.get_width() / 2, height),
+                        xytext=(0, 3),  # 3 points vertical offset
+                        textcoords="offset points",
+                        ha='center', va='bottom')
+
+    autolabel(rects1)
+    autolabel(rects2)
+
+    fig.tight_layout()
+
+    # plt.show()
+    plt.savefig(os.path.join(outdir, plotname), dpi=300, format='png',
+                bbox_inches='tight')  # use format='svg' or 'pdf' for vectorial pictures
+
+
+def plot_barh(x_labels: List[str], y1: List[float], y2: List[float], plotname: str, outdir: str):
+    n = len(y1)
+    fig, ax = plt.subplots(figsize=(5, max(n // 2, 1)))  # Changing figsize depending upon data
+
+    y_pos = np.arange(n)
+    width = 0.35
+
+    x_labels.reverse()
+    y1.reverse()
+    y2.reverse()
+    # ax.barh(y_pos, height, align='center', color='green', ecolor='black')
+    rects1 = ax.barh(y_pos - width / 2, y1, width, label='non-overlap score_based')
+    rects2 = ax.barh(y_pos + width / 2, y2, width, label='non-overlap area_based')
+
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(x_labels)
+    ax.set_xlabel('Recall drops')
+    ax.set_title(plotname.split(".")[0])
+    ax.set_ylim(0, n)  # Manage y-axis properly
+    ax.legend()
+
+    def autolabel(rects):
+        """Attach a text label above each bar in *rects*, displaying its height."""
+        for rect in rects:
+            width = rect.get_width()
+            ax.annotate('{}'.format(width),
+                        # xy=(rect.get_x() + rect.get_width() / 2, height),
+                        xy=(width, rect.get_y() - rect.get_height() / 2),
+                        xytext=(0, 3),  # 3 points vertical offset
+                        textcoords="offset points",
+                        ha='center', va='bottom')
+
+    autolabel(rects1)
+    autolabel(rects2)
+
+
+    # fig.tight_layout()
+
+    # plt.show()
+    plt.savefig(os.path.join(outdir, plotname), dpi=300, format='png',
+                bbox_inches='tight')  # use format='svg' or 'pdf' for vectorial pictures
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
@@ -696,41 +777,94 @@ if __name__ == "__main__":
 
     FLAGS = parser.parse_args()
 
-    # Check args
-    if FLAGS.nonOverlap:
-        print(">>> non-overlap (higher confidence mask on top)")
-    if FLAGS.nonOverlap_small:
-        print(">>> non-overlap (smaller mask on top")
-    if FLAGS.recall_based_on not in ['gt_bboxes', 'tracks']:
-        raise Exception(FLAGS.recall_based_on, "is not a valid option, choose from [gt_bboxes, tracks]")
+    # # Check args
+    # if FLAGS.nonOverlap:
+    #     print(">>> non-overlap (higher confidence mask on top)")
+    # if FLAGS.nonOverlap_small:
+    #     print(">>> non-overlap (smaller mask on top")
+    # if FLAGS.recall_based_on not in ['gt_bboxes', 'tracks']:
+    #     raise Exception(FLAGS.recall_based_on, "is not a valid option, choose from [gt_bboxes, tracks]")
+    #
+    # if FLAGS.postNMS:
+    #     props_dirs = ["Panoptic_Cas_R101_NMSoff+objectness003_bg_score",
+    #                   "Panoptic_Cas_R101_NMSoff+objectness003_bg_rpn_product",
+    #                   "Panoptic_Cas_R101_NMSoff+objectness003_bg_rpn_sum",
+    #                   "Panoptic_Cas_R101_NMSoff+objectness003_objectness",
+    #                   "Panoptic_Cas_R101_NMSoff+objectness003_one_minus_bg_score",
+    #                   "Panoptic_Cas_R101_NMSoff+objectness003_score"]
+    # else:
+    #     props_dirs = ["json"]
+    #
+    # props_dirs = [FLAGS.props_base_dir + p for p in props_dirs]
+    # score_funcs = ["bgScore", "bg*rpn", "bg+rpn", "objectness", "1-bgScore", "score"]
+    #
+    # if FLAGS.postNMS:
+    #     for eval_dir, score_f in zip(props_dirs, score_funcs):
+    #         print("(postNMS) Processing", eval_dir, "using", score_f)
+    #         FLAGS.evaluate_dir = eval_dir
+    #         FLAGS.score_func = score_f
+    #         main()
+    # else:
+    #     for score_f in score_funcs:
+    #         print("(normal NMS) Processing", props_dirs[0], "using", score_f)
+    #         FLAGS.evaluate_dir = props_dirs[0]
+    #         FLAGS.score_func = score_f
+    #         main()
 
-    if FLAGS.postNMS:
-        props_dirs = ["Panoptic_Cas_R101_NMSoff+objectness003_bg_score",
-                      "Panoptic_Cas_R101_NMSoff+objectness003_bg_rpn_product",
-                      "Panoptic_Cas_R101_NMSoff+objectness003_bg_rpn_sum",
-                      "Panoptic_Cas_R101_NMSoff+objectness003_objectness",
-                      "Panoptic_Cas_R101_NMSoff+objectness003_one_minus_bg_score",
-                      "Panoptic_Cas_R101_NMSoff+objectness003_score"]
-    else:
-        props_dirs = ["json"]
-
-    props_dirs = [FLAGS.props_base_dir + p for p in props_dirs]
-    score_funcs = ["bgScore", "bg*rpn", "bg+rpn", "objectness", "1-bgScore", "score"]
-
-    if FLAGS.postNMS:
-        for eval_dir, score_f in zip(props_dirs, score_funcs):
-            print("(postNMS) Processing", eval_dir, "using", score_f)
-            FLAGS.evaluate_dir = eval_dir
-            FLAGS.score_func = score_f
-            main()
-    else:
-        for score_f in score_funcs:
-            print("(normal NMS) Processing", props_dirs[0], "using", score_f)
-            FLAGS.evaluate_dir = props_dirs[0]
-            FLAGS.score_func = score_f
-            main()
-
+    # ===================================================
     # Post-processing of the json files
-    for data_type in ['unknown', 'neighbor']:
-        pass
+    # ===================================================
+    # tao_id to category_name mapping
+    val_annot_path = "/home/kloping/OpenSet_MOT/data/TAO/annotations/validation.json"
+    with open(val_annot_path, 'r') as f:
+        val_annot_dict = json.load(f)
 
+    category_dict = val_annot_dict['categories']
+    annots = val_annot_dict['annotations']
+    tracks = val_annot_dict['tracks']
+
+    # Mapping: category id -> category name
+    catID2name = dict()
+    for cat in category_dict:
+        cat_id = cat['id']
+        name = cat['name']
+        catID2name[cat_id] = name
+
+    recall_drop_base = "/home/kloping/OpenSet_MOT/TAO_eval/recall_drop_experiment/"
+    scorings = ["score", "bgScore", "1-bgScore", "objectness", "bg+rpn", "bg*rpn"]
+    subdatasets = ["ArgoVerse", "BDD", "Charades", "LaSOT", "YFCC100M"]
+    
+
+    for data_type in ['unknown', 'neighbor']:
+        print("Processing", data_type)
+        outdir = "/home/kloping/OpenSet_MOT/TAO_eval/recall_drop_experiment/plots/" + data_type
+        for subd in subdatasets:
+            print("Processing", subd)
+            plot_paths = list()
+            for scoring in scorings:
+                fname = "_".join([data_type, subd, scoring]) + ".json"
+                fpath = os.path.join(recall_drop_base, data_type, fname)
+                with open(fpath, 'r') as f:
+                    data = json.load(f)
+
+                score_base = data['score_top']
+                area_base = data['area_top']
+
+                x_labels = list()
+                y1, y2 = list(), list()
+                for cat_id in score_base.keys():
+                    x_labels.append(str(cat_id) + ": " + catID2name[int(cat_id)])
+                    y1.append(round(score_base[cat_id], 2))
+                    y2.append(round(area_base[cat_id], 2))
+
+                plotname = fname.replace(".json", ".png")
+                plot_paths.append(os.path.join(outdir, plotname))
+                plot_barh(x_labels, y1, y2, plotname, outdir)
+
+            # Combine all images for one sub-dataset
+            assert len(plot_paths) == 3*2
+            image_stitching(plot_paths, 3, 2, os.path.join(outdir, data_type + "_" + subd + "_combined.png"))
+            # Delete the images
+            print("Deleting images")
+            for p in plot_paths:
+                os.remove(p)
