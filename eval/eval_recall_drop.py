@@ -464,6 +464,10 @@ def evaluate_proposals(gt, props, n_max_proposals=1000):
 
 
 def evaluate_folder(gt, folder, ignored_sequences=(), score_fnc=score_func):
+    # reset
+    FLAGS.nonOverlap = False
+    FLAGS.nonOverlap_small = False
+
     props_postNMS = load_proposals(folder, gt, ignored_sequences=ignored_sequences, score_fnc=score_fnc)
     FLAGS.nonOverlap = True
     props_nonOverlap = load_proposals(folder, gt, ignored_sequences=ignored_sequences, score_fnc=score_fnc)
@@ -777,39 +781,39 @@ if __name__ == "__main__":
 
     FLAGS = parser.parse_args()
 
-    # # Check args
-    # if FLAGS.nonOverlap:
-    #     print(">>> non-overlap (higher confidence mask on top)")
-    # if FLAGS.nonOverlap_small:
-    #     print(">>> non-overlap (smaller mask on top")
-    # if FLAGS.recall_based_on not in ['gt_bboxes', 'tracks']:
-    #     raise Exception(FLAGS.recall_based_on, "is not a valid option, choose from [gt_bboxes, tracks]")
-    #
-    # if FLAGS.postNMS:
-    #     props_dirs = ["Panoptic_Cas_R101_NMSoff+objectness003_bg_score",
-    #                   "Panoptic_Cas_R101_NMSoff+objectness003_bg_rpn_product",
-    #                   "Panoptic_Cas_R101_NMSoff+objectness003_bg_rpn_sum",
-    #                   "Panoptic_Cas_R101_NMSoff+objectness003_objectness",
-    #                   "Panoptic_Cas_R101_NMSoff+objectness003_one_minus_bg_score",
-    #                   "Panoptic_Cas_R101_NMSoff+objectness003_score"]
-    # else:
-    #     props_dirs = ["json"]
-    #
-    # props_dirs = [FLAGS.props_base_dir + p for p in props_dirs]
-    # score_funcs = ["bgScore", "bg*rpn", "bg+rpn", "objectness", "1-bgScore", "score"]
-    #
-    # if FLAGS.postNMS:
-    #     for eval_dir, score_f in zip(props_dirs, score_funcs):
-    #         print("(postNMS) Processing", eval_dir, "using", score_f)
-    #         FLAGS.evaluate_dir = eval_dir
-    #         FLAGS.score_func = score_f
-    #         main()
-    # else:
-    #     for score_f in score_funcs:
-    #         print("(normal NMS) Processing", props_dirs[0], "using", score_f)
-    #         FLAGS.evaluate_dir = props_dirs[0]
-    #         FLAGS.score_func = score_f
-    #         main()
+    # Check args
+    if FLAGS.nonOverlap:
+        print(">>> non-overlap (higher confidence mask on top)")
+    if FLAGS.nonOverlap_small:
+        print(">>> non-overlap (smaller mask on top")
+    if FLAGS.recall_based_on not in ['gt_bboxes', 'tracks']:
+        raise Exception(FLAGS.recall_based_on, "is not a valid option, choose from [gt_bboxes, tracks]")
+
+    if FLAGS.postNMS:
+        props_dirs = ["Panoptic_Cas_R101_NMSoff+objectness003_bg_score",
+                      "Panoptic_Cas_R101_NMSoff+objectness003_bg_rpn_product",
+                      "Panoptic_Cas_R101_NMSoff+objectness003_bg_rpn_sum",
+                      "Panoptic_Cas_R101_NMSoff+objectness003_objectness",
+                      "Panoptic_Cas_R101_NMSoff+objectness003_one_minus_bg_score",
+                      "Panoptic_Cas_R101_NMSoff+objectness003_score"]
+    else:
+        props_dirs = ["json"]
+
+    props_dirs = [FLAGS.props_base_dir + p for p in props_dirs]
+    score_funcs = ["bgScore", "bg*rpn", "bg+rpn", "objectness", "1-bgScore", "score"]
+
+    if FLAGS.postNMS:
+        for eval_dir, score_f in zip(props_dirs, score_funcs):
+            print("(postNMS) Processing", eval_dir, "using", score_f)
+            FLAGS.evaluate_dir = eval_dir
+            FLAGS.score_func = score_f
+            main()
+    else:
+        for score_f in score_funcs:
+            print("(normal NMS) Processing", props_dirs[0], "using", score_f)
+            FLAGS.evaluate_dir = props_dirs[0]
+            FLAGS.score_func = score_f
+            main()
 
     # ===================================================
     # Post-processing of the json files
@@ -833,7 +837,7 @@ if __name__ == "__main__":
     recall_drop_base = "/home/kloping/OpenSet_MOT/TAO_eval/recall_drop_experiment/"
     scorings = ["score", "bgScore", "1-bgScore", "objectness", "bg+rpn", "bg*rpn"]
     subdatasets = ["ArgoVerse", "BDD", "Charades", "LaSOT", "YFCC100M"]
-    
+
 
     for data_type in ['unknown', 'neighbor']:
         print("Processing", data_type)
