@@ -1,5 +1,5 @@
-
 import cv2
+import glob
 import json
 import numpy as np
 import os
@@ -10,7 +10,7 @@ import tqdm
 
 
 from detectron2.data.detection_utils import read_image
-from pycocotools.mask import encode, decode
+from pycocotools.mask import encode, decode, area, toBbox
 from detectron2.structures.instances import Instances
 from typing import List
 from itertools import groupby
@@ -215,3 +215,126 @@ def image_stitching(image_paths, rows, cols, out_path):
 
     # Save image
     cv2.imwrite(out_path, all_combined)
+
+
+def remove_mask_overlap(proposals):
+    """
+    Args:
+        proposals: List[Dict], sorted proposals according specific scoring criterion. Each proposal contains:
+        {
+            category_id: int,
+            bbox: [x1, y1, x2, y2],
+            score: float (could be named differently, e.g. bg_score, objectness, etc)
+            instance_mask: COCO_RLE format,
+        }
+
+    Returns:
+        selected_props, List[Dict]
+    """
+    masks = [decode(prop['instance_mask']) for prop in proposals]
+    idx = [i for i in range(len(proposals))]
+    labels = np.arange(1, len(proposals) + 1)
+    png = np.zeros_like(masks[0])
+
+    # Put the mask there in reversed order, so that the latter one would just cover the previous one,
+    # and the latter one has higher score. (Because proposals are sorted)
+    for i in reversed(range(len(proposals))):
+        png[masks[i].astype("bool")] = labels[i]
+
+    refined_masks = [(png == id_).astype(np.uint8) for id_ in labels]
+    refined_segmentations = [encode(np.asfortranarray(refined_mask)) for refined_mask in refined_masks]
+    selected_props = []
+    for prop, refined_segmentation, mask in zip(proposals, refined_segmentations, refined_masks):
+        refined_segmentation['counts'] = refined_segmentation['counts'].decode("utf-8")
+        if area(refined_segmentation) == 0:
+            continue
+        prop['instance_mask'] = refined_segmentation
+        box = toBbox(refined_segmentation).tolist()  # in the form of [xc, yc, w, h]
+        # convert [xc, yc, w, h] to [x1, y1, x2, y2]
+        bbox = [box[0], box[1], box[0] + box[2], box[1] + box[3]]
+        prop['bbox'] = bbox
+        # prop['mask'] = mask
+
+        selected_props.append(prop)
+
+    return selected_props
+
+
+def remove_mask_overlap_small_on_top(proposals):
+    """
+    Similar with `remove_mask_overlap`, but instead of putting masks with higher scores on top,
+    put masks with smaller area on top.
+
+    Args:
+        proposals: List[Dict], sorted proposals according specific scoring criterion. Each proposal contains:
+        {
+            category_id: int,
+            bbox: [x1, y1, x2, y2],
+            score: float (could be named differently, e.g. bg_score, objectness, etc)
+            instance_mask: COCO_RLE format,
+        }
+
+    Returns:
+        selected_props, List[Dict]
+    """
+    # Sort proposals by it's area.
+    # all_areas = [area(prop['instance_mask']) for prop in proposals]
+    proposals.sort(key=lambda prop: area(prop['instance_mask']))
+    # all_areas2 = [area(prop['instance_mask']) for prop in proposals]
+
+    masks = [decode(prop['instance_mask']) for prop in proposals]
+    idx = [i for i in range(len(proposals))]
+    labels = np.arange(1, len(proposals) + 1)
+    png = np.zeros_like(masks[0])
+
+    # Put the mask there in reversed order, so that the latter one would just cover the previous one,
+    # and the latter one has smaller scores. (Because proposals are sorted by area)
+    for i in reversed(range(len(proposals))):
+        png[masks[i].astype("bool")] = labels[i]
+
+    refined_masks = [(png == id_).astype(np.uint8) for id_ in labels]
+    refined_segmentations = [encode(np.asfortranarray(refined_mask)) for refined_mask in refined_masks]
+    selected_props = []
+    for prop, refined_segmentation, mask in zip(proposals, refined_segmentations, refined_masks):
+        refined_segmentation['counts'] = refined_segmentation['counts'].decode("utf-8")
+        if area(refined_segmentation) == 0:
+            continue
+        prop['instance_mask'] = refined_segmentation
+        box = toBbox(refined_segmentation).tolist()  # in the form of [xc, yc, w, h]
+        # convert [xc, yc, w, h] to [x1, y1, x2, y2]
+        bbox = [box[0], box[1], box[0] + box[2], box[1] + box[3]]
+        prop['bbox'] = bbox
+        # prop['mask'] = mask
+
+        selected_props.append(prop)
+
+    return selected_props
+
+
+if __name__ == "__main__":
+    # root_dir = "/home/kloping/OpenSet_MOT/TAO_eval/TAO_VAL_Proposals/postNMS_bbox/Panoptic_Cas_R101_NMSoff+objectness003_objectness"
+    root_dir = "/home/kloping/OpenSet_MOT/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking/boxNMS/_objectness/"
+    outdir = "/home/kloping/OpenSet_MOT/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking/nonOverlap_small/objectness/"
+    scoring = "objectness"
+    # Read in proposals
+    # data_srcs = ["ArgoVerse", "BDD", "Charades",  "LaSOT", "YFCC100M"]
+    data_srcs = ["ArgoVerse"]
+    for data_src in data_srcs:
+        print("Processing", data_src)
+        videos = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(root_dir, data_src, '*')))]
+        for idx, video in enumerate(tqdm.tqdm(videos)):
+            fpath = os.path.join(root_dir, data_src, video)
+            json_files = sorted(glob.glob(fpath + '/*' + '.json'))
+            for jpath in json_files:
+                json_name = jpath.split("/")[-1]
+                with open(jpath, 'r') as f:
+                    proposals = json.load(f)
+                selected_proposals = remove_mask_overlap_small_on_top(proposals)
+                selected_proposals.sort(key=lambda prop: prop[scoring])
+
+                # Store new json file
+                outpath = os.path.join(outdir, data_src, video, json_name)
+                if not os.path.exists(os.path.join(outdir, data_src, video)):
+                    os.makedirs(os.path.join(outdir, data_src, video))
+                with open(outpath, 'w') as f:
+                    json.dump(selected_proposals, f)
