@@ -1,3 +1,5 @@
+BASE_TUM=/storage/slurm/liuyang/
+BASE_DAVE=/mnt/raid/davech2y/liuyang/
 
 # Experiments under CPU
 ./eval_net.py --config-file configs/COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml \
@@ -75,6 +77,12 @@ python gen_tao_proposals.py --config-file ../configs/Misc/noNMS/panoptic_fpn_R_1
                          --json /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/json/ \
                          --video_src_name BDD \
                          --opts MODEL.WEIGHTS /storage/slurm/liuyang/model_weights/detectron2/Panoptic_FPN_R101/model_final_be35db.pkl
+
+python gen_tao_proposals.py --config-file ../configs/Misc/noNMS/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml \
+                         --input /mnt/raid/davech2y/liuyang/data/TAO/frames/val/ \
+                         --json /mnt/raid/davech2y/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking/json/ \
+                         --video_src_name YFCC100M \
+                         --opts MODEL.WEIGHTS /mnt/raid/davech2y/liuyang/model_weights/detectron2/Panoptic_FPN_R101/model_final_be35db.pkl
 
 
 # Mask RCNN
