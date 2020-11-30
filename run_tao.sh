@@ -149,4 +149,7 @@ python NMS_postprocessing.py --scorings "bg_score" "one_minus_bg_score" "objectn
                              --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness003/json/ \
                              --outdir "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/postNMS_bbox/Panoptic_Cas_R101_NMSoff+objectness003"
 
-
+python NMS_postprocessing.py --scorings "objectness" "bg_score" "score" "one_minus_bg_score" "bg_rpn_sum" "bg_rpn_product" \
+                             --nms_criterion bbox \
+                             --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals//Panoptic_Cas_R101_NMSoff_forTracking/json/ \
+                             --outdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking/boxNMS/
