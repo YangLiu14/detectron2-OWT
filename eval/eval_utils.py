@@ -138,7 +138,7 @@ def store_TAOjson(predictions, input_img_path: str, valid_classes: List[int], js
         if pred_classes[i] in valid_classes:
             proposal['category_id'] = pred_classes[i].cpu().numpy().tolist()
             bbox = predictions['instances'].pred_boxes[i].tensor.cpu().numpy().tolist()[0]
-            proposal['bbox'] = [int(b) for b in bbox]  # Convert bbox coordinates to int
+            proposal['bbox'] = [float(b) for b in bbox]  # Convert bbox coordinates to int
             # Convert mask(numpy array) to mask(RLE)
             mask = predictions['instances'].pred_masks[i].cpu().numpy()
             mask_rle = encode(np.array(mask[:, :, np.newaxis], order='F'))[0]
@@ -147,7 +147,8 @@ def store_TAOjson(predictions, input_img_path: str, valid_classes: List[int], js
             proposal['score'] = predictions['instances'].scores[i].cpu().numpy().tolist()
             proposal['bg_score'] = predictions['instances'].bg_scores[i].cpu().numpy().tolist()
             proposal['objectness'] = predictions['instances'].objectness[i].cpu().numpy().tolist()
-            # proposal['embeddings'] = predictions['instances'].embeddings[i].cpu().numpy().tolist()
+            proposal['embeddings'] = predictions['instances'].embeddings[i].cpu().numpy().tolist()
+            proposal['embeddings'] = [float(e) for e in proposal['embeddings']]
             # output['proposals'].append(proposal)
             output.append(proposal)
     # output['sem_seg'] = predictions['sem_seg'].cpu().numpy()
