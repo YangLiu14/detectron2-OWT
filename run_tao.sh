@@ -150,6 +150,10 @@ python NMS_postprocessing.py --scorings "bg_score" "one_minus_bg_score" "objectn
                              --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness003/json/ \
                              --outdir "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/postNMS_bbox/Panoptic_Cas_R101_NMSoff+objectness003"
 
+# TODO:
+# 1. (cpu) Once the inference is done on atcremers79, run this to get postNMS proposals
+# 2. (cpu) Then get nonOverlap-small for each datasrc.
+# 3. (cpu) Convert dataset to mot-format and then feed them to SORT
 python NMS_postprocessing.py --scorings "objectness" "bg_score" "score" "one_minus_bg_score" "bg_rpn_sum" "bg_rpn_product" \
                              --nms_criterion bbox \
                              --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals//Panoptic_Cas_R101_NMSoff_forTracking/json/ \
