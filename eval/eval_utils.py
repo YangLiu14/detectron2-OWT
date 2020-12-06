@@ -159,7 +159,6 @@ def store_TAOjson(predictions, input_img_path: str, valid_classes: List[int], js
         json.dump(output, fout)
 
 
-
 def analyse_coco_cat(predictions, input_img_path: str, valid_classes: List[int], json_outdir: str):
     """
     Anaylse the output of the network to see if there is any coco classes id greater than 80.
