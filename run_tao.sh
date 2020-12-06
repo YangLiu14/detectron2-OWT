@@ -77,6 +77,11 @@ python gen_tao_proposals.py --config-file ../configs/Misc/noNMS/panoptic_fpn_R_1
                          --opts MODEL.WEIGHTS /storage/slurm/liuyang/model_weights/detectron2/Panoptic_FPN_R101/model_final_be35db.pkl
 
 
+python gen_tao_proposals_placeholder.py --config-file ../configs/Misc/noNMS/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml \
+                         --input /storage/slurm/liuyang/data/TAO/TAO_VAL/val/ \
+                         --json /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Placeholder/json/ \
+                         --opts MODEL.WEIGHTS /storage/slurm/liuyang/model_weights/detectron2/Panoptic_FPN_R101/model_final_be35db.pkl
+
 # Mask RCNN
 # class-aware
 python gen_tao_proposals.py --config-file ../configs/COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml \
