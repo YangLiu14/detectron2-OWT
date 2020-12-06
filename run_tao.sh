@@ -1,3 +1,5 @@
+BASE_TUM=/storage/slurm/liuyang/
+BASE_DAVE=/mnt/raid/davech2y/liuyang/
 
 # Experiments under CPU
 ./eval_net.py --config-file configs/COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml \
@@ -75,6 +77,12 @@ python gen_tao_proposals.py --config-file ../configs/Misc/noNMS/panoptic_fpn_R_1
                          --json /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/json/ \
                          --video_src_name BDD \
                          --opts MODEL.WEIGHTS /storage/slurm/liuyang/model_weights/detectron2/Panoptic_FPN_R101/model_final_be35db.pkl
+
+python gen_tao_proposals.py --config-file ../configs/Misc/noNMS/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml \
+                         --input /mnt/raid/davech2y/liuyang/data/TAO/frames/val/ \
+                         --json /mnt/raid/davech2y/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking/json/ \
+                         --video_src_name YFCC100M \
+                         --opts MODEL.WEIGHTS /mnt/raid/davech2y/liuyang/model_weights/detectron2/Panoptic_FPN_R101/model_final_be35db.pkl
 
 
 python gen_tao_proposals_placeholder.py --config-file ../configs/Misc/noNMS/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml \
@@ -155,6 +163,10 @@ python NMS_postprocessing.py --scorings "bg_score" "one_minus_bg_score" "objectn
                              --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness003/json/ \
                              --outdir "/storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/postNMS_bbox/Panoptic_Cas_R101_NMSoff+objectness003"
 
+# TODO:
+# 1. (cpu) Once the inference is done on atcremers79, run this to get postNMS proposals
+# 2. (cpu) Then get nonOverlap-small for each datasrc.
+# 3. (cpu) Convert dataset to mot-format and then feed them to SORT
 python NMS_postprocessing.py --scorings "objectness" "bg_score" "score" "one_minus_bg_score" "bg_rpn_sum" "bg_rpn_product" \
                              --nms_criterion bbox \
                              --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals//Panoptic_Cas_R101_NMSoff_forTracking/json/ \
