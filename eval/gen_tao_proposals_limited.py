@@ -143,6 +143,7 @@ if __name__ == "__main__":
                 path_split = path.split('/')
                 idx = path_split.index(video_src)
                 video_name = path_split[idx + 1]
+                print("PROCESS VIDEO {}".format(video_name))
                 json_outdir = os.path.join(args.json, video_src, video_name)
                 if not os.path.exists(json_outdir):
                     os.makedirs(json_outdir)
