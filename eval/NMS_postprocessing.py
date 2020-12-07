@@ -4,10 +4,14 @@ import json
 import math
 import numpy as np
 import os
+import torch
 import tqdm
 import warnings
 
 from pycocotools.mask import encode, decode, iou, toBbox
+from torchvision.ops import boxes as box_ops
+from torchvision.ops import nms
+from typing import List
 
 
 def compute_iou_for_binary_segmentation(y_argmax, target):
@@ -184,6 +188,7 @@ def nms_mask(masks, confidence_score, threshold=0.5):
 
 
 def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # Load original proposals
     with open(seq, 'r') as f:
         proposals = json.load(f)
@@ -193,6 +198,7 @@ def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
     props_for_nms['bboxes'] = list()
     props_for_nms['masks'] = list()
     props_for_nms['scores'] = list()
+    # props_for_nms['embeddings'] = list()
 
     for prop in proposals:
         cat_id = prop['category_id']
@@ -209,10 +215,32 @@ def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
         props_for_nms['bboxes'].append(prop['bbox'])
         props_for_nms['masks'].append(prop['instance_mask'])
         props_for_nms['scores'].append(curr_score)
+        # props_for_nms['embeddings'].append(prop['embeddings'])
 
     output = list()
     if args.nms_criterion == 'bbox':
-        props_nms_box, props_nms_mask, scores_nms = nms_bbox(props_for_nms['bboxes'], props_for_nms['masks'], props_for_nms['scores'], iou_thres)
+        # props_nms_box, props_nms_mask, scores_nms = nms_bbox(props_for_nms['bboxes'], props_for_nms['masks'], props_for_nms['scores'], iou_thres)
+        """
+        torchvision.ops.nms
+            Args:
+                boxes: Tensor[N,4] - boxes in (x1,y1,x2,y2) format
+                scores: Tensor[N] 
+                iou_threshold: float
+            Return:
+                keep: int64 - tensor with the indices of the elements that have been kept by NMS, 
+                              sorted in decreasing order of scores
+        """
+        boxes_tensor = torch.Tensor(props_for_nms['bboxes']).to(device)
+        scores_tensor = torch.Tensor(props_for_nms['scores']).to(device)
+
+        keep = nms(boxes=boxes_tensor, scores=scores_tensor, iou_threshold=0.5)
+        props_nms_box = boxes_tensor[keep].cpu().tolist()
+        scores_nms = scores_tensor[keep].cpu().tolist()
+
+        keep = keep.cpu().tolist()
+        props_nms_mask = [props_for_nms['masks'][i] for i in keep]
+        # props_nms_embed = [props_for_nms['embeddings'][i] for i in keep]
+
     elif args.nms_criterion == 'instance_mask':
         props_nms, scores_nms = nms_mask(props_for_nms['props'], props_for_nms['scores'], iou_thres)
     else:
@@ -233,6 +261,8 @@ def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
     elif args.nms_criterion == 'bbox':
         for box, mask, score in zip(props_nms_box, props_nms_mask, scores_nms):
             output.append({'bbox': box, 'instance_mask': mask, scoring: score})
+        # for box, mask, embed, score in zip(props_nms_box, props_nms_mask, props_nms_embed, scores_nms):
+        #     output.append({'bbox': box, 'instance_mask': mask, 'embeddings': embed, scoring: score})
 
     # Store proposals after NMS
     outdir = "/".join(outpath.split("/")[:-1])
