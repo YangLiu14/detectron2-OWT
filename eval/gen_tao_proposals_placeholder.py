@@ -1,10 +1,4 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-"""
-gen_tao_proposals_limited.py
-Different with gen_tao_proposals.py:
-here we only do inference on those annotated frames, and igore frames without annotations.
-"""
-
 import argparse
 import glob
 import multiprocessing as mp
@@ -24,7 +18,7 @@ from predictor import VisualizationDemo
 
 # constants
 WINDOW_NAME = "COCO detections"
-# os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 # --config-file ../configs/COCO-InstanceSegmentation/mask_rcnn_X_101_32x8d_FPN_3x.yaml \
 # --input /Volumes/Elements1T/TAO_VAL/val/ --output /Users/lander14/Desktop/TAO_VAL_Proposals/viz/
@@ -81,7 +75,7 @@ def get_parser():
         help="A file or directory to save output proposals as json files. "
     )
     parser.add_argument(
-        "--video_src_name", nargs='+',
+        "--video_src_name",
         help="Specify the video_src_name (the name of the dataset) that you want to process. "
              "Otherwise, process every folder in the given root directory.",
     )
@@ -123,7 +117,7 @@ if __name__ == "__main__":
         # video_names = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(args.input[0], '*'))) if fn.split('/')[-1][0] == 'b']
         video_src_names = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(args.input[0], '*')))]
         if args.video_src_name:  #only process that one video src
-            video_src_names = args.video_src_name[0].split()
+            video_src_names = [args.video_src_name]
         print("Processing the following dataset: {}".format(video_src_names))
 
         for video_src in video_src_names:
@@ -131,62 +125,62 @@ if __name__ == "__main__":
             video_names = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(args.input[0], video_src, '*')))]
             video_names.sort()
 
-            # Load annotated frames
-            txt_fname = "../datasets/tao/val_annotated_{}.txt".format(video_src)
-            with open(txt_fname) as f:
-                content = f.readlines()
-            seq_names_from_txt = [os.path.join(args.input[0], x.strip()) for x in content]
+            for idx, video_name in enumerate(video_names):
+                print("PROCESS VIDEO {}: {}".format(idx, video_name))
+                # Find all frames in the path given by args.input
+                seq = glob.glob(os.path.join(args.input[0], video_src, video_name, "*.jpg"))
+                # seq = glob.glob(os.path.join(args.input[0], video_name, "*.png"))
+                # seq.sort()
+                # seq = seq[:100]
 
-            from eval_utils import store_TAOjson, analyse_coco_cat
-            for path in tqdm.tqdm(seq_names_from_txt):
-
-                path_split = path.split('/')
-                idx = path_split.index(video_src)
-                video_name = path_split[idx + 1]
-                print("PROCESS VIDEO {}".format(video_name))
                 json_outdir = os.path.join(args.json, video_src, video_name)
+                # json_outdir = args.json + video_name
                 if not os.path.exists(json_outdir):
                     os.makedirs(json_outdir)
 
-                start_all = time.time()
-                # use PIL, to be consistent with evaluation
-                img = read_image(path, format="BGR")
-                # predictions, visualized_output = demo.run_on_image(img)
-                # start_pred = time.time()
-                predictions = demo.predictor(img)
-                # end_pred = time.time()
-                valid_classes = [i for i in range(81)]
-                # store_TAOjson(predictions, path, valid_classes, json_outdir)
-                # analyse_coco_cat(predictions, path, valid_classes, json_outdir)
+                # from eval_utils import store_TAOjson, analyse_coco_cat
+                for path in tqdm.tqdm(seq):
+                    start_all = time.time()
+                    # use PIL, to be consistent with evaluation
+                    img = read_image(path, format="BGR")
+                    # predictions, visualized_output = demo.run_on_image(img)
+                    # start_pred = time.time()
+                    predictions = demo.predictor(img)
+                    # end_pred = time.time()
+                    valid_classes = [i for i in range(81)]
+
+                    # store_TAOjson(predictions, path, valid_classes, json_outdir)
+                    # analyse_coco_cat(predictions, path, valid_classes, json_outdir)
+                    time.sleep(5)
 
 
-                # print("Inference time: {}".format(end_pred - start_pred))
-                # print("All time: {}".format(time.time() - start_all))
+                    # print("Inference time: {}".format(end_pred - start_pred))
+                    # print("All time: {}".format(time.time() - start_all))
 
 
-                # if args.output:
-                #     if not os.path.exists(args.output + "/" + video_name):
-                #         os.makedirs(args.output + "/" + video_name)
-                #     out_filename = os.path.join(args.output, video_name, os.path.basename(path))
+                    # if args.output:
+                    #     if not os.path.exists(args.output + "/" + video_name):
+                    #         os.makedirs(args.output + "/" + video_name)
+                    #     out_filename = os.path.join(args.output, video_name, os.path.basename(path))
+                    #
+                    #     if os.path.isdir(args.output):
+                    #         assert os.path.isdir(args.output), args.output
+                    #     else:
+                    #         assert len(args.input) == 1, "Please specify a directory with args.output"
+                    #         out_filename = args.output
+                    #     visualized_output.save(out_filename)
+                    # else:
+                    #     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+                    #     cv2.imshow(WINDOW_NAME, visualized_output.get_image()[:, :, ::-1])
+                    #     if cv2.waitKey(0) == 27:
+                    #         break  # esc to quit
+
+                # average_time = sum(time_list) / len(time_list)
+                # # print("Average image processing time: ", str(average_time))
                 #
-                #     if os.path.isdir(args.output):
-                #         assert os.path.isdir(args.output), args.output
-                #     else:
-                #         assert len(args.input) == 1, "Please specify a directory with args.output"
-                #         out_filename = args.output
-                #     visualized_output.save(out_filename)
-                # else:
-                #     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-                #     cv2.imshow(WINDOW_NAME, visualized_output.get_image()[:, :, ::-1])
-                #     if cv2.waitKey(0) == 27:
-                #         break  # esc to quit
-
-            # average_time = sum(time_list) / len(time_list)
-            # # print("Average image processing time: ", str(average_time))
-            #
-            # json_outpath = json_outdir + "/" + "white_coco.json"
-            # with open(json_outpath, 'w') as fout:
-            #     json.dump(coco_output, fout)
+                # json_outpath = json_outdir + "/" + "white_coco.json"
+                # with open(json_outpath, 'w') as fout:
+                #     json.dump(coco_output, fout)
     elif args.webcam:
         assert args.input is None, "Cannot have both --input and --webcam!"
         cam = cv2.VideoCapture(0)
@@ -234,5 +228,3 @@ if __name__ == "__main__":
             output_file.release()
         else:
             cv2.destroyAllWindows()
-
-
