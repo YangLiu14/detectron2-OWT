@@ -317,6 +317,9 @@ def process_one_frame_categorywise(seq: str, scoring: str, iou_thres: float, out
 
 def process_all_folders(root_dir: str, scoring: str, iou_thres: float, outdir: str):
     video_src_names = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(root_dir, '*')))]
+    if args.datasrc:
+        video_src_names = args.datasrc
+
     print(">>>>>>>>> Doing NMS for the following dataset: {}".format(video_src_names))
 
     for video_src in video_src_names:
@@ -348,6 +351,7 @@ if __name__ == "__main__":
                                                                     'ignoring their categories')
     parser.add_argument('--inputdir', required=True, type=str, help='input directory of orginal proposals.')
     parser.add_argument('--outdir', required=True, type=str, help='output directory of the proposals after NMS')
+    parser.add_argument('--datasrc', nargs='+', type=str, help='datasrc to process')
     args = parser.parse_args()
 
     for scoring in args.scorings:
