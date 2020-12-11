@@ -139,7 +139,7 @@ if __name__ == "__main__":
             video_names = [fn.split('/')[-1] for fn in sorted(glob.glob(os.path.join(args.input[0], video_src, '*')))]
             video_names.sort()
 
-            from eval_utils import store_TAOjson, analyse_coco_cat
+            from eval_utils import store_TAOjson, store_TAOpickle, analyse_coco_cat
             for path in video_names_from_txt:
 
                 path_split = path.split('/')
@@ -161,6 +161,7 @@ if __name__ == "__main__":
                     # end_pred = time.time()
                     valid_classes = [i for i in range(81)]
                     store_TAOjson(predictions, frame_path, valid_classes, json_outdir)
+                    store_TAOpickle(predictions, frame_path, valid_classes, json_outdir)
                     # analyse_coco_cat(predictions, path, valid_classes, json_outdir)
 
 
