@@ -173,10 +173,13 @@ def store_TAOjson(predictions, input_img_path: str, valid_classes: List[int], js
         json.dump(output, fout)
 
 
-def store_TAOpickle(predictions, input_img_path: str, valid_classes: List[int], json_outdir: str):
-    frame_name = input_img_path.split('/')[-1].replace('.jpg', '.pickle')
+def store_TAOnpz(predictions, input_img_path: str, valid_classes: List[int], npz_outdir: str):
+    """
+    Same as store_TAOjson, but store in .npz file --> 5 times smaller.
+    """
+    frame_name = input_img_path.split('/')[-1].replace('.jpg', '.npz')
     frame_name = frame_name.split('-')[-1]  # specifically for bdd-100k data
-    json_outpath = os.path.join(json_outdir, frame_name)
+    npz_outpath = os.path.join(npz_outdir, frame_name)
     # output = dict()
     # output['proposals'] = list()
     output = list()
@@ -205,8 +208,7 @@ def store_TAOpickle(predictions, input_img_path: str, valid_classes: List[int], 
             output.append(proposal)
     # output['sem_seg'] = predictions['sem_seg'].cpu().numpy()
 
-    with open(json_outpath, 'wb') as fout:
-        pickle.dump(output, fout)
+    np.savez_compressed(npz_outpath, output)
 
 
 def analyse_coco_cat(predictions, input_img_path: str, valid_classes: List[int], json_outdir: str):

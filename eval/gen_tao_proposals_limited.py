@@ -137,7 +137,7 @@ if __name__ == "__main__":
                 content = f.readlines()
             seq_names_from_txt = [os.path.join(args.input[0], x.strip()) for x in content]
 
-            from eval_utils import store_TAOjson, analyse_coco_cat
+            from eval_utils import store_TAOnpz, analyse_coco_cat
             for path in tqdm.tqdm(seq_names_from_txt):
 
                 path_split = path.split('/')
@@ -156,7 +156,9 @@ if __name__ == "__main__":
                 predictions = demo.predictor(img)
                 # end_pred = time.time()
                 valid_classes = [i for i in range(81)]
-                store_TAOjson(predictions, path, valid_classes, json_outdir)
+                # store_TAOjson(predictions, path, valid_classes, json_outdir)
+                store_TAOnpz(predictions, path, valid_classes, json_outdir)
+
                 # analyse_coco_cat(predictions, path, valid_classes, json_outdir)
 
 
