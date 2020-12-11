@@ -200,10 +200,14 @@ def store_TAOnpz(predictions, input_img_path: str, valid_classes: List[int], npz
             proposal['score'] = predictions['instances'].scores[i].cpu().numpy().tolist()
             proposal['bg_score'] = predictions['instances'].bg_scores[i].cpu().numpy().tolist()
             proposal['objectness'] = predictions['instances'].objectness[i].cpu().numpy().tolist()
-            # proposal['embeddings'] = predictions['instances'].embeddings[i].cpu().numpy().tolist()
-            embeddings = predictions['instances'].embeddings[i].cpu().numpy().astype(np.float32)
-            proposal['embeddings'] = embeddings.tolist()
-            # proposal['embeddings'] = [float(e) for e in proposal['embeddings']]
+            embeddings = predictions['instances'].embeddings[i].cpu().numpy()
+            # Each value in the shaped (2048,) embedding is between [0, 1]
+            # Each value * 1e4 and store as uint16 will save a lot of storage space,
+            # when using the embeddings, each value should be again divided by 1e4.
+            # This encode/decode operation is equal to keeping 4 decimal digits of the original float value.
+            #   uint16: Unsigned integer (0 to 65535)
+            proposal['embeddings'] = (embeddings * 1e4).astype(np.uint16).tolist()
+
             # output['proposals'].append(proposal)
             output.append(proposal)
     # output['sem_seg'] = predictions['sem_seg'].cpu().numpy()
