@@ -131,7 +131,7 @@ def store_TAOjson(predictions, input_img_path: str, valid_classes: List[int], js
     - List of Dict:
         {"category_id": (int),
          "bbox": [x1, y1, x2, y2],
-         "instance_mask": {"size": [img_h, img_w], "count": rle_str}
+         "instance_mask": {"size": [img_h, img_w], "counts": rle_str}
          "score": (float),
          "bg_score": (float),
          "objectness": (float),
