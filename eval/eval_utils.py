@@ -148,7 +148,7 @@ def store_TAOjson(predictions, input_img_path: str, valid_classes: List[int], js
             proposal['bg_score'] = predictions['instances'].bg_scores[i].cpu().numpy().tolist()
             proposal['objectness'] = predictions['instances'].objectness[i].cpu().numpy().tolist()
             # proposal['embeddings'] = predictions['instances'].embeddings[i].cpu().numpy().tolist()
-            embeddings = predictions['instances'].embeddings[i].cpu().numpy().astype(np.float32)
+            embeddings = predictions['instances'].embeddings[i].cpu().numpy().astype(np.int16)
             proposal['embeddings'] = embeddings.tolist()
             # proposal['embeddings'] = [float(e) for e in proposal['embeddings']]
             # output['proposals'].append(proposal)
