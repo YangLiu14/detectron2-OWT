@@ -190,15 +190,17 @@ def nms_mask(masks, confidence_score, threshold=0.5):
 def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # Load original proposals
-    with open(seq, 'r') as f:
-        proposals = json.load(f)
+    # with open(seq, 'r') as f:
+    #     proposals = json.load(f)
+    npz_file = np.load(seq, allow_pickle=True)
+    proposals = npz_file['arr_0'].tolist()
 
     props_for_nms = dict()
     # props_for_nms['props'] = list()
     props_for_nms['bboxes'] = list()
     props_for_nms['masks'] = list()
     props_for_nms['scores'] = list()
-    props_for_nms['embeddings'] = list()
+    # props_for_nms['embeddings'] = list()
 
     for prop in proposals:
         cat_id = prop['category_id']
@@ -215,7 +217,7 @@ def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
         props_for_nms['bboxes'].append(prop['bbox'])
         props_for_nms['masks'].append(prop['instance_mask'])
         props_for_nms['scores'].append(curr_score)
-        props_for_nms['embeddings'].append(prop['embeddings'])
+        # props_for_nms['embeddings'].append(prop['embeddings'])
 
     output = list()
     if args.nms_criterion == 'bbox':
@@ -239,7 +241,7 @@ def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
 
         keep = keep.cpu().tolist()
         props_nms_mask = [props_for_nms['masks'][i] for i in keep]
-        props_nms_embed = [props_for_nms['embeddings'][i] for i in keep]
+        # props_nms_embed = [props_for_nms['embeddings'][i] for i in keep]
 
     elif args.nms_criterion == 'instance_mask':
         props_nms, scores_nms = nms_mask(props_for_nms['props'], props_for_nms['scores'], iou_thres)
@@ -259,15 +261,16 @@ def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
             # END of TEST
             output.append({'bbox': bbox, args.nms_criterion: prop, scoring: score})
     elif args.nms_criterion == 'bbox':
-        # for box, mask, score in zip(props_nms_box, props_nms_mask, scores_nms):
-        #     output.append({'bbox': box, 'instance_mask': mask, scoring: score})
-        for box, mask, embed, score in zip(props_nms_box, props_nms_mask, props_nms_embed, scores_nms):
-            output.append({'bbox': box, 'instance_mask': mask, 'embeddings': embed, scoring: score})
+        for box, mask, score in zip(props_nms_box, props_nms_mask, scores_nms):
+            output.append({'bbox': box, 'instance_mask': mask, scoring: score})
+        # for box, mask, embed, score in zip(props_nms_box, props_nms_mask, props_nms_embed, scores_nms):
+        #     output.append({'bbox': box, 'instance_mask': mask, 'embeddings': embed, scoring: score})
 
     # Store proposals after NMS
     outdir = "/".join(outpath.split("/")[:-1])
     if not os.path.exists(outdir):
         os.makedirs(outdir)
+    outpath = outpath.replace('.npz', '.json')
     with open(outpath, 'w') as f:
         json.dump(output, f)
 
@@ -328,7 +331,7 @@ def process_all_folders(root_dir: str, scoring: str, iou_thres: float, outdir: s
         video_names.sort()
 
         for idx, video_name in enumerate(tqdm.tqdm(video_names)):
-            all_seq = glob.glob(os.path.join(root_dir, video_src, video_name, "*.json"))
+            all_seq = glob.glob(os.path.join(root_dir, video_src, video_name, "*.npz"))
             for seq in all_seq:
                 json_name = seq.split("/")[-1]
                 outpath = os.path.join(outdir + "_" + scoring, video_src, video_name, json_name)

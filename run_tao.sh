@@ -175,11 +175,25 @@ python NMS_postprocessing.py --scorings "bg_score" "one_minus_bg_score" "objectn
 # 3. (cpu) Convert dataset to mot-format and then feed them to SORT
 python NMS_postprocessing.py --scorings "objectness" "bg_score" "score" "one_minus_bg_score" "bg_rpn_sum" "bg_rpn_product" \
                              --nms_criterion bbox \
-                             --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals//Panoptic_Cas_R101_NMSoff_forTracking/json/ \
+                             --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking/json/ \
                              --outdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking/boxNMS/
 
 python NMS_postprocessing.py --scorings "objectness" "score" "one_minus_bg_score" \
                              --nms_criterion bbox \
-                             --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/subset_experiment/Panoptic_Cas_R101_NMSoff_forTracking_Embed/json/ \
-                             --outdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/subset_experiment/Panoptic_Cas_R101_NMSoff_forTracking_Embed/boxNMS/ \
-                             --datasrc YFCC100M
+                             --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking/preprocessed/ \
+                             --outdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking/boxNMS_npz/ \
+                             --datasrc ArgoVerse
+
+python NMS_postprocessing.py --scorings "objectness" "score" "one_minus_bg_score" \
+                             --nms_criterion bbox \
+                             --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking/preprocessed/ \
+                             --outdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking/boxNMS_npz002/ \
+                             --datasrc ArgoVerse
+
+# ==========================================================================
+# Non Overlap
+# ==========================================================================
+python non_overlap.py --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking/boxNMS_npz002/ \
+  --outdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking/nonOverlap_from_boxNMS/ \
+  --criterion score --scoring score --datasrcs ArgoVerse
+
