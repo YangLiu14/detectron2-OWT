@@ -2,11 +2,12 @@ import glob
 import json
 import os
 import sys
+import tqdm
 
 
 def map_image_id2idx(annot_dict: str):
     """
-    Map the image_id in annotatition['images'] to its index.
+    Map the image_id in annotation['images'] to its index.
     Args:
         annot_dict: The annotation file (loaded from json)
 
@@ -23,7 +24,7 @@ def map_image_id2idx(annot_dict: str):
 
 def get_annotated_sequences2():
     root_dir = "/home/kloping/OpenSet_MOT/data/TAO/annotations/"
-    fname = "train.json"
+    fname = "validation.json"
     with open (root_dir + fname, 'r') as f:
         annot_dict = json.load(f)
 
@@ -74,6 +75,57 @@ def get_annotated_sequences2():
             for item in l:
                 f.write("%s\n" % item)
 
+
+def get_annotated_sequences3():
+    root_dir = "/home/kloping/OpenSet_MOT/data/TAO/annotations/"
+    fname = "validation.json"
+    with open (root_dir + fname, 'r') as f:
+        annot_dict = json.load(f)
+
+    ArgoVerse = list()
+    BDD = list()
+    Charades = list()
+    LaSOT = list()
+    YFCC100M = list()
+    AVA = list()
+    HACS = list()
+
+    for image in tqdm.tqdm(annot_dict['images']):
+        img_fpath = image["file_name"]
+        data_src = img_fpath.split('/')[1]
+        video_name = img_fpath.split('/')[2]
+
+        if data_src == "ArgoVerse":
+            ArgoVerse.append(img_fpath)
+        elif data_src == "BDD":
+            BDD.append(img_fpath)
+        elif data_src == "Charades":
+            Charades.append(img_fpath)
+        elif data_src == "LaSOT":
+            LaSOT.append(img_fpath)
+        elif data_src == "YFCC100M":
+            YFCC100M.append(img_fpath)
+        elif data_src == "AVA":
+            AVA.append(img_fpath)
+        elif data_src == "HACS":
+            HACS.append(img_fpath)
+        else:
+            print(data_src + '/' + video_name, "ignored")
+
+        ArgoVerse.sort()
+        BDD.sort()
+        Charades.sort()
+        LaSOT.sort()
+        YFCC100M.sort()
+        AVA.sort()
+        HACS.sort()
+
+    data_src_names = ['ArgoVerse', 'BDD', 'Charades', 'LaSOT', 'YFCC100M', 'AVA', 'HACS']
+    all_list = [ArgoVerse, BDD, Charades, LaSOT, YFCC100M, AVA, HACS]
+    for name, l in zip(data_src_names, all_list):
+        with open('val_annotated_{}.txt'.format(name), 'w') as f:
+            for item in l:
+                f.write("%s\n" % item)
 
 def get_annotated_sequences():
     """
@@ -134,4 +186,4 @@ if __name__ == "__main__":
     #
     # print(num_images)
 
-    get_annotated_sequences2()
+    get_annotated_sequences3()
