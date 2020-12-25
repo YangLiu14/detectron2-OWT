@@ -195,5 +195,5 @@ python NMS_postprocessing.py --scorings "objectness" "score" "one_minus_bg_score
 # ==========================================================================
 python non_overlap.py --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking/boxNMS_npz002/ \
   --outdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking/nonOverlap_from_boxNMS/ \
-  --criterion score --scoring score --datasrcs ArgoVerse
+  --criterion score --scoring objectness --datasrcs ArgoVerse
 

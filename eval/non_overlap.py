@@ -48,5 +48,8 @@ if __name__ == "__main__":
     for datasrc in args.datasrcs:
         print("Current data source:", datasrc)
         input_dir = os.path.join(args.inputdir, '_' + args.scoring, datasrc)
-        outdir = os.path.join(args.outdir, '_' + args.scoring, datasrc)
+        if args.criterion == "score":
+            outdir = os.path.join(args.outdir, "high_score_on_top", '_' + args.scoring, datasrc)
+        elif args.criterion == "area":
+            outdir = os.path.join(args.outdir, "small_area_on_top", '_' + args.scoring, datasrc)
         main(input_dir, outdir, args.scoring, args.criterion, file_type='.json')
