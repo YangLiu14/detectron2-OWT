@@ -128,7 +128,7 @@ if __name__ == "__main__":
             for idx, video_name in enumerate(video_names):
                 print("PROCESS VIDEO {}: {}".format(idx, video_name))
                 # Find all frames in the path given by args.input
-                seq = glob.glob(os.path.join(args.input[0], video_src, video_name, "*.jpg"))
+                seq = sorted(glob.glob(os.path.join(args.input[0], video_src, video_name, "*.jpg")))
                 # seq = glob.glob(os.path.join(args.input[0], video_name, "*.png"))
                 # seq.sort()
                 # seq = seq[:100]
@@ -149,6 +149,7 @@ if __name__ == "__main__":
                     # end_pred = time.time()
                     valid_classes = [i for i in range(81)]
                     # store_TAOjson(predictions, path, valid_classes, json_outdir)
+                    import pdb; pdb.set_trace()
                     store_TAOnpz(predictions, path, valid_classes, json_outdir)
                     # analyse_coco_cat(predictions, path, valid_classes, json_outdir)
 
