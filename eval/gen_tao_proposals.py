@@ -149,7 +149,6 @@ if __name__ == "__main__":
                     # end_pred = time.time()
                     valid_classes = [i for i in range(81)]
                     # store_TAOjson(predictions, path, valid_classes, json_outdir)
-                    import pdb; pdb.set_trace()
                     store_TAOnpz(predictions, path, valid_classes, json_outdir)
                     # analyse_coco_cat(predictions, path, valid_classes, json_outdir)
 
