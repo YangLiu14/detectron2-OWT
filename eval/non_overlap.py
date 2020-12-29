@@ -9,8 +9,13 @@ from eval.eval_utils import remove_mask_overlap, remove_mask_overlap_small_on_to
 
 
 def process_one_frame(fpath:str, outdir:str, scoring: str, criterion, file_type='.json'):
-    with open(fpath, 'r') as f:
-        proposals = json.load(f)
+    if file_type == ".json":
+        with open(fpath, 'r') as f:
+            proposals = json.load(f)
+    elif file_type == ".npz":
+        proposals = np.load(fpath, allow_pickle=True)['arr_0'].tolist()
+    else:
+        raise Exception("unrecognized file type.")
 
     if criterion == "score":
         proposals.sort(key=lambda prop: prop[scoring], reverse=True)
@@ -52,4 +57,4 @@ if __name__ == "__main__":
             outdir = os.path.join(args.outdir, "high_score_on_top", '_' + args.scoring, datasrc)
         elif args.criterion == "area":
             outdir = os.path.join(args.outdir, "small_area_on_top", '_' + args.scoring, datasrc)
-        main(input_dir, outdir, args.scoring, args.criterion, file_type='.json')
+        main(input_dir, outdir, args.scoring, args.criterion, file_type='.npz')
