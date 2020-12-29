@@ -270,9 +270,10 @@ def process_one_frame(seq: str, scoring: str, iou_thres: float, outpath: str):
     outdir = "/".join(outpath.split("/")[:-1])
     if not os.path.exists(outdir):
         os.makedirs(outdir)
-    outpath = outpath.replace('.npz', '.json')
-    with open(outpath, 'w') as f:
-        json.dump(output, f)
+    # outpath = outpath.replace('.npz', '.json')
+    # with open(outpath, 'w') as f:
+    #     json.dump(output, f)
+    np.savez_compressed(outpath, output)
 
 
 # TODO: this function is not yet adapted for mask_based_nms
