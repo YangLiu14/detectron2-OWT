@@ -101,7 +101,7 @@ def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_la
     for img in images:
         imgID2fname[img['id']] = img['file_name']
 
-    nbox_ArgoVerse, nbox_BDD, nbox_Charades, nbox_LaSOT, nbox_YFCC100M = 0, 0, 0, 0, 0
+    nbox_ArgoVerse, nbox_BDD, nbox_Charades, nbox_LaSOT, nbox_YFCC100M, nbox_AVA, nbox_HACS = 0, 0, 0, 0, 0, 0, 0
 
     for ann in annotations:
         if ann["category_id"] in exclude_classes:
@@ -126,6 +126,10 @@ def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_la
             nbox_LaSOT += 1
         elif src_name == 'YFCC100M':
             nbox_YFCC100M += 1
+        elif src_name == 'AVA':
+            nbox_AVA += 1
+        elif src_name == 'HACS':
+            nbox_HACS += 1
 
         xc, yc, w, h = ann['bbox']
         # convert [xc, yc, w, h] to [x1, y1, x2, y2]
@@ -146,7 +150,9 @@ def load_gt(exclude_classes=(), ignored_sequences=(), prefix_dir_name='oxford_la
             "BDD": nbox_BDD,
             "Charades": nbox_Charades,
             "LaSOT": nbox_LaSOT,
-            "YFCC100M": nbox_YFCC100M}
+            "YFCC100M": nbox_YFCC100M,
+            'AVA': nbox_AVA,
+            'HACS': nbox_HACS,}
     return gt, n_boxes, nbox
 
 
@@ -202,7 +208,8 @@ def load_proposals(folder, gt, ignored_sequences=(), score_fnc=score_func):
         #     print("Error loading json: %s" % prop_filename)
         #     quit()
         try:
-            props = json.load(open(prop_filename))
+            # props = json.load(open(prop_filename))
+            props = np.load(prop_filename, allow_pickle=True)['arr_0'].tolist()
         except:
             print(prop_filename, "not found")
             continue
@@ -542,7 +549,7 @@ def evaluate_all_folders_oxford(gt, plot_title, n_subset_gt_boxes, user_specifie
         dirs.sort()
 
         # ignore_dirs = ["BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA"]
-        ignore_dirs = ["HACS", "AVA"]
+        ignore_dirs = []
         for mydir in dirs:
             if mydir[0] == '.':
                 continue  # Filter out `.DS_Store` and `._.DS_Store`
@@ -567,7 +574,7 @@ def evaluate_all_folders_oxford(gt, plot_title, n_subset_gt_boxes, user_specifie
 
 def eval_recall_oxford(output_dir):
     # ignored_seq = ("BDD", "Charades", "LaSOT", "YFCC100M", "HACS", "AVA")
-    ignored_seq = ("HACS", "AVA")
+    # ignored_seq = ("HACS", "AVA")
 
     # +++ "known" categories +++
     print("evaluating coco 78 classes without hot_dog and oven:")

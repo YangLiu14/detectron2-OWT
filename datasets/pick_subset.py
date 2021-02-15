@@ -23,8 +23,9 @@ def copy_subset_to_folder(prop_dir: str, outdir: str, datasrc: str, split='val')
 
 if __name__ == "__main__":
     datasrcs = ["ArgoVerse", "BDD", "Charades", "LaSOT", "YFCC100M", "AVA", "HACS"]
-    prop_dir = "/storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/npz/"
-    outdir = "/storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsets_from_npz/"
+    # datasrcs = ["HACS"]
+    prop_dir = "/storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/preprocessed/"
+    outdir = "/storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsets_from_preprocessed/"
     for datasrc in datasrcs:
         print("Processing", datasrc)
         copy_subset_to_folder(prop_dir, outdir, datasrc, split='val')

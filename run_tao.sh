@@ -74,7 +74,7 @@ python gen_tao_proposals_limited.py --config-file ../configs/Misc/noNMS/panoptic
 # Validation Set
 python gen_tao_proposals.py --config-file ../configs/Misc/noNMS/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml \
                          --input /storage/slurm/liuyang/data/TAO/TAO_VAL/val/ \
-                         --json /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/npz/ \
+                         --json /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/npz/ \
                          --video_src_name HACS \
                          --opts MODEL.WEIGHTS /storage/slurm/liuyang/model_weights/detectron2/Panoptic_FPN_R101/model_final_be35db.pkl
 
@@ -184,11 +184,18 @@ python NMS_postprocessing.py --scorings "objectness" "score" "one_minus_bg_score
                              --outdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking/boxNMS_npz/ \
                              --datasrc ArgoVerse
 
+python NMS_postprocessing.py --scorings "bg_score" "bg_rpn_sum" "bg_rpn_product" \
+                             --nms_criterion bbox \
+                             --inputdir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsets_from_preprocessed/0_npz/ \
+                             --outdir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsests_from_preprocessed/1_boxNMS/ \
+                             --datasrc ArgoVerse
+
 python NMS_postprocessing.py --scorings "objectness" "score" "one_minus_bg_score" \
                              --nms_criterion bbox \
-                             --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/preprocessed/ \
-                             --outdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/boxNMS_npz/ \
+                             --inputdir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsets_from_preprocessed/0_npz/ \
+                             --outdir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsest_from_preprocessed/1_boxNMS/ \
                              --datasrc ArgoVerse
+
 
 # ==========================================================================
 # Non Overlap
@@ -199,7 +206,7 @@ python non_overlap.py --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposa
   --criterion score --scoring objectness --datasrcs ArgoVerse
 
 
-python non_overlap.py --inputdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/boxNMS_npz/ \
-  --outdir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/nonOverlap_from_boxNMS/ \
+python non_overlap.py --inputdir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/pwc_output_bidirection/ \
+  --outdir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/nonOverlap_from_pwcWarp/ \
   --criterion score --scoring objectness --datasrcs ArgoVerse
 

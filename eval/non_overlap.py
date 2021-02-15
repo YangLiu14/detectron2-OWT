@@ -48,12 +48,12 @@ if __name__ == "__main__":
     parser.add_argument("--criterion", help="higher score on top or smaller area on top")
     parser.add_argument("--scoring", required=True, help="scoring criterion used tp produce the NMS result")
     parser.add_argument('--datasrcs', nargs='+', type=str, help='IoU threshold used in NMS')
-    parser.add_argument('--file_type', default=".npz", type=str, help='.npz or .json')
+    parser.add_argument('--file_type', default=".json", type=str, help='.npz or .json')
     args = parser.parse_args()
 
     for datasrc in args.datasrcs:
         print("Current data source:", datasrc)
-        input_dir = os.path.join(args.inputdir, '_' + args.scoring, datasrc)
+        input_dir = os.path.join(args.inputdir, args.scoring, datasrc)
         if args.criterion == "score":
             outdir = os.path.join(args.outdir, "high_score_on_top", '_' + args.scoring, datasrc)
         elif args.criterion == "area":
