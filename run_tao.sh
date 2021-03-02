@@ -116,13 +116,82 @@ python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eva
                                 --recall_based_on gt_bboxes \
                                 --nonOverlap \
                                 --do_not_timestamp
+
+# =====================================================================================================================
+# Recall vs N props
+# =====================================================================================================================
+# Raw
+python eval_recall_vs_nprops.py --plot_output_dir /storage/user/liuyang/Recall_eval/props_1000raw_FULL/ \
+                                --props_base_dir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsets_from_npz/ \
+                                --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
+                                --recall_based_on gt_bboxes \
+                                --do_not_timestamp \
+                                --split unknown
+
 # Post NMS
-python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/NEWplot_boxNMS_nonOverlapSmall_gtboxes/ \
-                                --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/postNMS_bbox/ \
+python eval_recall_vs_nprops.py --plot_output_dir /storage/user/liuyang/Recall_eval/nprops_postNMS/ \
+                                --props_base_dir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsets_from_preprocessed/1_boxNMS/ \
+                                --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
+                                --recall_based_on gt_bboxes \
+                                --postNMS --do_not_timestamp \
+                                --split unknown
+
+# Non Overlap Score
+python eval_recall_vs_nprops.py --plot_output_dir /storage/user/liuyang/Recall_eval/props_NonOverlapScore/ \
+                                --props_base_dir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsets_from_preprocessed/1_boxNMS/ \
+                                --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
+                                --recall_based_on gt_bboxes \
+                                --nonOverlap \
+                                --postNMS --do_not_timestamp \
+                                --split unknown
+
+# Non Overlap Area
+python eval_recall_vs_nprops.py --plot_output_dir /storage/user/liuyang/Recall_eval/props_NonOverlapArea/ \
+                                --props_base_dir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsets_from_preprocessed/1_boxNMS/ \
                                 --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
                                 --recall_based_on gt_bboxes \
                                 --nonOverlap_small \
-                                --postNMS --do_not_timestamp
+                                --postNMS --do_not_timestamp \
+                                --split unknown
+# =====================================================================================================================
+# =====================================================================================================================
+# Recall vs N tracks
+# =====================================================================================================================
+# Raw
+python eval_recall_vs_ntracks.py --plot_output_dir /storage/user/liuyang/Recall_eval/tracks_only1/ \
+                                --props_base_dir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsets_from_npz/ \
+                                --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
+                                --recall_based_on tracks \
+                                --do_not_timestamp \
+                                --split unknown
+
+# Post NMS
+python eval_recall_vs_ntracks.py --plot_output_dir /storage/user/liuyang/Recall_eval/tracks_postNMS/ \
+                                --props_base_dir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsets_from_preprocessed/1_boxNMS/ \
+                                --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
+                                --recall_based_on tracks \
+                                --postNMS --do_not_timestamp \
+                                --split unknown
+
+# Non Overlap Score
+python eval_recall_vs_ntracks.py --plot_output_dir /storage/user/liuyang/Recall_eval/tracks_NonOverlapScore/ \
+                                --props_base_dir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsets_from_preprocessed/1_boxNMS/ \
+                                --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
+                                --recall_based_on tracks \
+                                --nonOverlap \
+                                --postNMS --do_not_timestamp \
+                                --split unknown
+
+# Non Overlap Area
+python eval_recall_vs_ntracks.py --plot_output_dir /storage/user/liuyang/Recall_eval/tracks_NonOverlapArea/ \
+                                --props_base_dir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsets_from_preprocessed/1_boxNMS/ \
+                                --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
+                                --recall_based_on tracks \
+                                --nonOverlap_small \
+                                --postNMS --do_not_timestamp \
+                                --split unknown
+# =====================================================================================================================
+
 
 python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/NEWplot_boxNMS+nonOverlapBbox_gtboxes/ \
                                 --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/postNMS_bbox/ \
@@ -134,16 +203,18 @@ python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eva
 
 # TAO_VAL evaluation: Recall(of GT-tracks) vs n_props
 # No NMS
-python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/plot_output_noNMSnoOverlap_tracks/ \
-                                --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff+objectness003/ \
+
+python eval_recall_vs_nprops.py --plot_output_dir /storage/user/liuyang/TAO_eval/Final_nprops_1000preprocessed/ \
+                                --props_base_dir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsets_from_preprocessed/0_npz/ \
                                 --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
-                                --recall_based_on tracks \
+                                --recall_based_on gt_bboxes \
                                 --do_not_timestamp
 # Post NMS
-python eval_recall_vs_nprops.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/NEWplot_boxNMSonly_tracks/ \
-                                --props_base_dir /storage/slurm/liuyang/TAO_eval/TAO_VAL_Proposals/postNMS_bbox/ \
+python eval_recall_vs_nprops.py --plot_output_dir /storage/user/liuyang/TAO_eval/Final_ntracks_nonOverlapArea/ \
+                                --props_base_dir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsets_from_preprocessed/1_boxNMS/ \
                                 --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
-                                --recall_based_on tracks \
+                                --recall_based_on gt_bboxes \
+                                --nonOverlap_small \
                                 --postNMS --do_not_timestamp
 
 # Keep 1000 proposals invariant, and vary N from 1 to 100
@@ -159,6 +230,20 @@ python eval_recall_drop.py --plot_output_dir /storage/slurm/liuyang/TAO_eval/rec
                            --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
                            --recall_based_on gt_bboxes \
                            --postNMS --do_not_timestamp
+
+
+python eval_recall_vs_NinTracks.py --plot_output_dir /storage/user/liuyang/TAO_eval/Final_ntracks_1000raw/ \
+                                --props_base_dir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsets_from_npz/ \
+                                --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
+                                --recall_based_on tracks \
+                                --do_not_timestamp
+
+python eval_recall_vs_NinTracks.py --plot_output_dir /storage/user/liuyang/TAO_eval/Final_ntracks_nonOverlapArea/ \
+                                --props_base_dir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/subsets_from_preprocessed/1_boxNMS/ \
+                                --labels /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
+                                --recall_based_on tracks \
+                                --nonOverlap_small \
+                                --postNMS --do_not_timestamp
 
 
 # ==============================================================================
