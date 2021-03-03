@@ -223,6 +223,7 @@ class TracktorPredictor(DefaultPredictor):
     """
     Inherited from DefaultPredictor. The changes are made specifically for Tracktor style of bboxes regression.
     """
+
     def __call__(self, original_image, boxes):
         """
         Args:
@@ -256,9 +257,6 @@ class TracktorPredictor(DefaultPredictor):
             inputs = {"image": image, "bboxes": new_boxes, "height": height, "width": width}
             predictions = self.model([inputs])[0]
             return predictions
-
-
-
 
 
 class DefaultTrainer(SimpleTrainer):

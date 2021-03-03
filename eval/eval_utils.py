@@ -4,6 +4,7 @@ import json
 import numpy as np
 import os
 import pickle
+import png
 import sys
 import time
 import torch
@@ -15,6 +16,141 @@ from pycocotools.mask import encode, decode, area, toBbox
 from detectron2.structures.instances import Instances
 from typing import List
 from itertools import groupby
+
+
+def bbox_iou(boxA, boxB):
+    """
+    bbox in the form of [x1,y1,x2,y2]
+    """
+    # determine the (x, y)-coordinates of the intersection rectangle
+    xA = max(boxA[0], boxB[0])
+    yA = max(boxA[1], boxB[1])
+    xB = min(boxA[2], boxB[2])
+    yB = min(boxA[3], boxB[3])
+
+    # compute the area of intersection rectangle
+    interArea = abs(max((xB - xA, 0)) * max((yB - yA), 0))
+    if interArea == 0:
+        return 0
+    # compute the area of both the prediction and ground-truth
+    # rectangles
+    boxAArea = abs((boxA[2] - boxA[0]) * (boxA[3] - boxA[1]))
+    boxBArea = abs((boxB[2] - boxB[0]) * (boxB[3] - boxB[1]))
+
+    # compute the intersection over union by taking the intersection
+    # area and dividing it by the sum of prediction + ground-truth
+    # areas - the interesection area
+    iou = interArea / float(boxAArea + boxBArea - interArea)
+
+    # return the intersection over union value
+    return iou
+
+
+# ==============================================================
+# G-IoU, adapted from:
+# https://github.com/generalized-iou/Detectron.pytorch/blob/master/lib/utils/net.py
+# =============================================================
+def compute_giou(box1, box2, bbox_inside_weights, bbox_outside_weights):
+
+    x1, y1, x2, y2 = box1
+    x1g, y1g, x2g, y2g = box2
+
+    x2 = torch.max(x1, x2)
+    y2 = torch.max(y1, y2)
+
+    xkis1 = torch.max(x1, x1g)
+    ykis1 = torch.max(y1, y1g)
+    xkis2 = torch.min(x2, x2g)
+    ykis2 = torch.min(y2, y2g)
+
+    xc1 = torch.min(x1, x1g)
+    yc1 = torch.min(y1, y1g)
+    xc2 = torch.max(x2, x2g)
+    yc2 = torch.max(y2, y2g)
+
+    intsctk = torch.zeros(x1.size()).to(box1)
+    mask = (ykis2 > ykis1) * (xkis2 > xkis1)
+    intsctk[mask] = (xkis2[mask] - xkis1[mask]) * (ykis2[mask] - ykis1[mask])
+    unionk = (x2 - x1) * (y2 - y1) + (x2g - x1g) * (y2g - y1g) - intsctk + 1e-7
+    iouk = intsctk / unionk
+
+    area_c = (xc2 - xc1) * (yc2 - yc1) + 1e-7
+    miouk = iouk - ((area_c - unionk) / area_c)
+    # iou_weights = bbox_inside_weights.view(-1, 4).mean(1) * bbox_outside_weights.view(-1, 4).mean(1)
+    # iouk = ((1 - iouk) * iou_weights).sum(0)
+    # miouk = ((1 - miouk) * iou_weights).sum(0)
+
+    # return iouk, miouk
+    return miouk
+
+
+def open_flow_png_file(file_path_list):
+    # Decode the information stored in the filename
+    flow_png_info = {}
+    for file_path in file_path_list:
+        file_token_list = os.path.splitext(file_path)[0].split("_")
+        minimal_value = int(file_token_list[-1].replace("minimal", ""))
+        flow_axis = file_token_list[-2]
+        flow_png_info[flow_axis] = {'path': file_path,
+                                    'minimal_value': minimal_value}
+
+    # Open both files and add back the minimal value
+    for axis, flow_info in flow_png_info.items():
+        png_reader = png.Reader(filename=flow_info['path'])
+        flow_2d = np.vstack(list(map(np.float32, png_reader.asDirect()[2])))
+
+        # Add the minimal value back
+        flow_2d = flow_2d.astype(np.float32) + flow_info['minimal_value']
+
+        flow_png_info[axis]['flow'] = flow_2d
+
+    # Combine the flows
+    flow_x = flow_png_info['x']['flow']
+    flow_y = flow_png_info['y']['flow']
+    flow = np.stack([flow_x, flow_y], 2)
+
+    return flow
+
+
+def warp_flow(img, flow, binarize=True):
+    """
+    Use the given optical-flow vector to warp the input image/mask in frame t-1,
+    to estimate its shape in frame t.
+    :param img: (H, W, C) numpy array, if C=1, then it's omissible. The image/mask in previous frame.
+    :param flow: (H, W, 2) numpy array. The optical-flow vector.
+    :param binarize:
+    :return: (H, W, C) numpy array. The warped image/mask.
+    """
+    h, w = flow.shape[:2]
+    flow = -flow
+    flow[:, :, 0] += np.arange(w)
+    flow[:, :, 1] += np.arange(h)[:, np.newaxis]
+    res = cv2.remap(img, flow, None, cv2.INTER_LINEAR)
+    if binarize:
+        res = np.equal(res, 1).astype(np.uint8)
+    return res
+
+
+def readFlow(fn):
+    """ Read .flo file in Middlebury format"""
+    # Code adapted from:
+    # http://stackoverflow.com/questions/28013200/reading-middlebury-flow-files-with-python-bytes-array-numpy
+
+    # WARNING: this will work on little-endian architectures (eg Intel x86) only!
+    # print 'fn = %s'%(fn)
+    with open(fn, 'rb') as f:
+        magic = np.fromfile(f, np.float32, count=1)
+        if 202021.25 != magic:
+            print('Magic number incorrect. Invalid .flo file')
+            return None
+        else:
+            w = np.fromfile(f, np.int32, count=1)
+            h = np.fromfile(f, np.int32, count=1)
+            # print 'Reading %d x %d flo file\n' % (w, h)
+            data = np.fromfile(f, np.float32, count=2 * int(w) * int(h))
+            # Reshape data into 3D array (columns, rows, bands)
+            # The reshape here is for visualization, the original code is (w,h,2)
+            return np.resize(data, (int(h), int(w), 2))
 
 
 def filter_pred_by(valid_classes: List[int], predictions):
