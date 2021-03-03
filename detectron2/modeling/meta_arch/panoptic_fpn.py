@@ -80,6 +80,8 @@ class PanopticFPN(nn.Module):
         if "proposals" in batched_inputs[0]:
             proposals = [x["proposals"].to(self.device) for x in batched_inputs]
             proposal_losses = {}
+        if "bboxes" in batched_inputs[0]:  # Added for tracktor adaptation
+            tracktor_props = [x["bboxes"].to(self.device) for x in batched_inputs]
 
         if "sem_seg" in batched_inputs[0]:
             gt_sem_seg = [x["sem_seg"].to(self.device) for x in batched_inputs]
@@ -96,8 +98,11 @@ class PanopticFPN(nn.Module):
             gt_instances = None
         if self.proposal_generator:
             proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
+        # detector_results, detector_losses = self.roi_heads(
+        #     images, features, proposals, gt_instances
+        # )
         detector_results, detector_losses = self.roi_heads(
-            images, features, proposals, gt_instances
+            images, features, tracktor_props, gt_instances
         )
 
         if self.training:

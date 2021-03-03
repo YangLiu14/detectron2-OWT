@@ -7,7 +7,7 @@ import cv2
 import torch
 
 from detectron2.data import MetadataCatalog
-from detectron2.engine.defaults import DefaultPredictor
+from detectron2.engine.defaults import DefaultPredictor, TracktorPredictor
 from detectron2.utils.video_visualizer import VideoVisualizer
 from detectron2.utils.visualizer import ColorMode, Visualizer
 
@@ -32,7 +32,8 @@ class VisualizationDemo(object):
             num_gpu = torch.cuda.device_count()
             self.predictor = AsyncPredictor(cfg, num_gpus=num_gpu)
         else:
-            self.predictor = DefaultPredictor(cfg)
+            # self.predictor = DefaultPredictor(cfg)
+            self.predictor = TracktorPredictor(cfg)
 
 
     def run_on_image(self, image):
