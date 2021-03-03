@@ -146,6 +146,15 @@ class CascadeROIHeads(StandardROIHeads):
             losses.update(self._forward_keypoint(features, proposals))
             return proposals, losses
         else:
+            # Tracktor modification
+            proposals_dummy = [Instances(image_size=(1080, 1920))]
+            box = torch.Tensor([[0, 10, 20, 30], [30, 30, 56, 78]]).cuda()
+            proposals_dummy[0].proposal_boxes = Boxes(tensor=box)
+            obj_logits = torch.ones((2,)).cuda()
+            proposals_dummy[0].objectness_logits = obj_logits
+            import pdb; pdb.set_trace()
+            # END of dummy proposals
+
             pred_instances = self._forward_box(features, proposals)
             pred_instances = self.forward_with_given_boxes(features, pred_instances)
             return pred_instances, {}
