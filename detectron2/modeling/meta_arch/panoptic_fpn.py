@@ -96,8 +96,13 @@ class PanopticFPN(nn.Module):
             gt_instances = [x["instances"].to(self.device) for x in batched_inputs]
         else:
             gt_instances = None
-        if self.proposal_generator:
-            proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
+        # ================================
+        # Yang: this is temporarily disabled because we use proposals from previous frame now
+        # ===============================
+        # if self.proposal_generator:
+        #     proposals, proposal_losses = self.proposal_generator(images, features, gt_instances)
+        # ================================
+
         # detector_results, detector_losses = self.roi_heads(
         #     images, features, proposals, gt_instances
         # )
