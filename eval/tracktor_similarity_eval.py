@@ -210,7 +210,7 @@ def similarity_tracktor(predictor, prop_L, props_R, frameL, frameR,
                             image_dir, prop_dir, opt_flow_dir, mode='bbox', use_frames_in_between=True):
 
     bbox_L = np.array([prop_L['bbox']])
-    mask_L = prop_L['instance_mask']
+    mask_L = decode(prop_L['instance_mask'])
 
     image_paths = sorted(glob.glob(image_dir + '/*' + '.jpg'))
     prop_paths = sorted(glob.glob(prop_dir + '/*' + '.npz'))
@@ -264,7 +264,7 @@ def similarity_tracktor(predictor, prop_L, props_R, frameL, frameR,
             top_iou = np.max(ious)
             # update
             bbox_L = np.array([proposals[matched_idx]['bbox']])
-            mask_L = proposals[matched_idx]['instance_mask']
+            mask_L = decode(proposals[matched_idx]['instance_mask'])
         return matched_idx, top_iou
 
     else:
@@ -492,6 +492,23 @@ def eval_similarity(predictor, similarity_func: str, datasrc: str, gt_path: str,
     print("Top 1 accuracy (known) =    {}/{}".format(num_correct_known, num_evaled_known))
     print("Top 1 accuracy (neighbor) = {}/{}".format(num_correct_neighbor, num_evaled_neighbor))
     print("Top 1 accuracy (unknown) =  {}/{}".format(num_correct_unknown, num_evaled_unknown))
+
+    result_outpath = os.path.join(outdir, datasrc + '_finalResult.txt')
+    with open(result_outpath, 'a+') as f:
+        f.write('-' * 65 + '\n')
+        f.write('-' * 25 + f' Final Results ' + '-' * 25 + '\n')
+        f.write(
+            f'(known) small: {known_correct_small}/{known_evaled_small}; medium: {known_correct_medium}/{known_evaled_medium}; large: {known_correct_big}/{known_evaled_big} \n')
+        f.write(
+            f'(neigh) small: {neighbor_correct_small}/{neighbor_evaled_small}; medium: {neighbor_correct_medium}/{neighbor_evaled_medium}; large: {neighbor_correct_big}/{neighbor_evaled_big} \n')
+        f.write(
+            f'(unknw) small: {unknown_correct_small}/{unknown_evaled_small}; medium: {unknown_correct_medium}/{unknown_evaled_medium}; large: {unknown_correct_big}/{unknown_evaled_big} \n')
+
+        f.write('-' * 65 + '\n')
+        f.write(f'Top 1 accuracy =            {num_correct}/{num_evaled} = {num_correct / num_evaled}\n')
+        f.write(f'Top 1 accuracy (known) =    {num_correct_known}/{num_evaled_known}\n')
+        f.write(f'Top 1 accuracy (neighbor) = {num_correct_neighbor}/{num_evaled_neighbor}\n')
+        f.write(f'Top 1 accuracy (unknown) =  {num_correct_unknown}/{num_evaled_unknown}\n')
 
 
 def setup_cfg(args):

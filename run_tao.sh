@@ -255,8 +255,8 @@ python tracktor_similarity_eval.py \
   --gt_path /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
   --opt_flow_dir /storage/slurm/liuyang/Optical_Flow/pwc_net/ \
   --outdir /storage/slurm/liuyang/Evaluation/Proposal_Similarity/ \
-  --similarity_func tracktor-direct-bbox \
-  --pair_gap 1sec --datasrc ArgoVerse \
+  --similarity_func tracktor-continuous-bbox \
+  --pair_gap 1sec --datasrc HACS \
   --opts MODEL.WEIGHTS /storage/slurm/liuyang/model_weights/detectron2/Panoptic_FPN_R101/model_final_be35db.pkl
 
 
@@ -264,10 +264,11 @@ python tracktor_similarity_eval.py \
   --image_dir /storage/slurm/liuyang/data/TAO/TAO_VAL/val/ \
   --prop_dir /storage/user/liuyang/TAO_eval/TAO_VAL_Proposals/Panoptic_Cas_R101_NMSoff_forTracking_Embed/preprocessed/ \
   --gt_path /storage/slurm/liuyang/data/TAO/TAO_annotations/validation.json \
-  --opt_flow_dir /storage/slurm/liuyang/Optical_Flow/pwc_net_subset/ \
+  --opt_flow_dir /storage/slurm/liuyang/Optical_Flow/pwc_net/ \
   --outdir /storage/slurm/liuyang/Evaluation/Proposal_Similarity/ \
-  --similarity_func tracktor-direct-optFlow\
-  --pair_gap 1sec --datasrc ArgoVerse
+  --similarity_func tracktor-continuous-optFlow \
+  --pair_gap 1sec --datasrc ArgoVerse \
+  --opts MODEL.WEIGHTS /storage/slurm/liuyang/model_weights/detectron2/Panoptic_FPN_R101/model_final_be35db.pkl
 
 # ==============================================================================
 # NMS Post-processing
