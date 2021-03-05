@@ -267,7 +267,7 @@ python tracktor_similarity_eval.py \
   --opt_flow_dir /storage/slurm/liuyang/Optical_Flow/pwc_net/ \
   --outdir /storage/slurm/liuyang/Evaluation/Proposal_Similarity/ \
   --similarity_func tracktor-continuous-optFlow \
-  --pair_gap 1sec --datasrc ArgoVerse \
+  --pair_gap 1sec --datasrc YFCC100M \
   --opts MODEL.WEIGHTS /storage/slurm/liuyang/model_weights/detectron2/Panoptic_FPN_R101/model_final_be35db.pkl
 
 # ==============================================================================

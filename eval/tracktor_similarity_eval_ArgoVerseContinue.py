@@ -301,10 +301,10 @@ def eval_similarity(predictor, similarity_func: str, datasrc: str, gt_path: str,
     # Only load gt and proposals relevant to current datasrc
     gt = load_gt(gt_path, datasrc)
 
-    num_correct, num_evaled = 0, 0
-    num_correct_known, num_evaled_known = 0, 0
-    num_correct_neighbor, num_evaled_neighbor = 0, 0
-    num_correct_unknown, num_evaled_unknown = 0, 0
+    num_correct, num_evaled = 2422, 2707
+    num_correct_known, num_evaled_known = 2341, 2609
+    num_correct_neighbor, num_evaled_neighbor = 73, 80
+    num_correct_unknown, num_evaled_unknown = 8, 18
 
     known_correct_big, known_evaled_big = 0, 0
     known_correct_medium, known_evaled_medium = 0, 0
@@ -319,9 +319,9 @@ def eval_similarity(predictor, similarity_func: str, datasrc: str, gt_path: str,
     unknown_correct_small, unknown_evaled_small = 0, 0
 
     videos = sorted(gt.keys())
-    for vidx, video in enumerate(videos):
+    for vidx, video in enumerate(videos[61:]):
         similarity_record = dict()
-        print("{}/{} Process Videos {}/{}".format(vidx, len(videos), datasrc, video))
+        print("{}/{} Process Videos {}/{}".format(vidx + 61, len(videos), datasrc, video))
         proposals_per_video = load_proposals(prop_dir, video)
         annot_frames = sorted(list(proposals_per_video[video]))
 
