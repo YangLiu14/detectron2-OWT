@@ -277,8 +277,9 @@ def similarity_tracktor(predictor, prop_L, props_R, frameL, frameR,
             warped_mask = warp_flow(mask_L, flow)
             warp_enc = encode(np.array(warped_mask[:, :, np.newaxis], order='F'))[0]
             warp_enc['counts'] = warp_enc['counts'].decode(encoding="utf-8")
-            x, y, w, h = toBbox(warp_enc).tolist()
-            bbox_L = np.array([[x, y, x + w, y + h]])
+            if area(warp_enc) > 0:
+                x, y, w, h = toBbox(warp_enc).tolist()
+                bbox_L = np.array([[x, y, x + w, y + h]])
 
         predictions = demo.predictor(img, bbox_L)
         regressed_bbox = predictions['instances'].pred_boxes[0].tensor.cpu().numpy().tolist()[0]
