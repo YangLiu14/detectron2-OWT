@@ -378,6 +378,9 @@ def eval_similarity(predictor, similarity_func: str, datasrc: str, gt_path: str,
                                                                os.path.join(prop_dir, video),
                                                                opt_flow_dir=os.path.join(opt_flow_dir, video),
                                                                mode='bbox', use_frames_in_between=False)
+                elif similarity_func == "tracktor-kalman-filter":
+                    matched_idx, top_iou = similarity_kalman_filter(prop_L, props_R, frameL, frameR,
+                             image_dir, prop_dir, use_frames_in_between=True)
                 #
                 # elif similarity_func == "opt-flow-mask-continuous":
                 #     matched_idx, top_iou = similarity_optical_flow(propL, props_R, frameL, frameR,
