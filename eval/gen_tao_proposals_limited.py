@@ -22,6 +22,8 @@ from detectron2.utils.logger import setup_logger
 
 from predictor import VisualizationDemo
 
+from eval_utils import store_TAOnpz, analyse_coco_cat
+
 # constants
 WINDOW_NAME = "COCO detections"
 # os.environ["CUDA_VISIBLE_DEVICES"] = "2"
@@ -87,6 +89,15 @@ def get_parser():
     )
 
     parser.add_argument(
+        "--vidx_start", default=0, type=int,
+        help="start processing video from this index",
+    )
+    parser.add_argument(
+        "--vidx_end", default=1000000000000, type=int,
+        help="processing video until this index",
+    )
+
+    parser.add_argument(
         "--confidence-threshold",
         type=float,
         default=0.0,
@@ -132,14 +143,12 @@ if __name__ == "__main__":
             video_names.sort()
 
             # Load annotated frames
-            txt_fname = "../datasets/tao/val_annotated_{}.txt".format(video_src)
+            txt_fname = "../datasets/tao/test_annotated_{}.txt".format(video_src)
             with open(txt_fname) as f:
                 content = f.readlines()
             seq_names_from_txt = [os.path.join(args.input[0], x.strip()) for x in content]
 
-            from eval_utils import store_TAOnpz, analyse_coco_cat
-            for path in tqdm.tqdm(seq_names_from_txt):
-
+            for path in tqdm.tqdm(seq_names_from_txt[args.vidx_start : args.vidx_end]):
                 path_split = path.split('/')
                 idx = path_split.index(video_src)
                 video_name = path_split[idx + 1]
@@ -158,7 +167,6 @@ if __name__ == "__main__":
                 valid_classes = [i for i in range(81)]
                 # store_TAOjson(predictions, path, valid_classes, json_outdir)
                 store_TAOnpz(predictions, path, valid_classes, json_outdir)
-
                 # analyse_coco_cat(predictions, path, valid_classes, json_outdir)
 
 
