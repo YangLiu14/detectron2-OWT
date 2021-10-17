@@ -121,9 +121,9 @@ def load_gt(gt_path: str, datasrc: str):
     return res
 
 
-def load_proposals(prop_dir, curr_video):
+def load_proposals(prop_dir, curr_video, split):
     datasrc = prop_dir.split('/')[-1]
-    with open(ROOT_DIR + '/datasets/tao/val_annotated_{}.txt'.format(datasrc), 'r') as f:
+    with open(ROOT_DIR + '/datasets/tao/{}_annotated_{}.txt'.format(split, datasrc), 'r') as f:
         txt_data = f.readlines()
 
     print("Loading proposals in", datasrc)
@@ -206,7 +206,7 @@ def find_objects_in_both_frames(gt, prop_dir:str, video: str, frameL: str, frame
     return common_objects, common_ids
 
 
-def similarity_tracktor(predictor, prop_L, props_R, frameL, frameR,
+def similarity_tracktor(demo, prop_L, props_R, frameL, frameR,
                             image_dir, prop_dir, opt_flow_dir, mode='bbox', use_frames_in_between=True):
 
     bbox_L = np.array([prop_L['bbox']])
@@ -294,7 +294,8 @@ def similarity_tracktor(predictor, prop_L, props_R, frameL, frameR,
                                  bbox_outside_weights=torch.Tensor([1, 1, 1, 1])).item() for box in bboxes]
             ious = np.array(ious)
 
-        return int(np.argmax(ious)), np.max(ious)
+        # return int(np.argmax(ious)), np.max(ious)
+        return ious
 
 
 def eval_similarity(predictor, similarity_func: str, datasrc: str, gt_path: str, prop_dir: str, opt_flow_dir: str,
