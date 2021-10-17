@@ -106,6 +106,10 @@ def online_tracking(proposals_dir: str, opt_flow_dir: str, output_root: str, spl
     # proposals_per_video = load_proposals(proposals_dir, split, video_set, video,
     #                                                         use_frames_in_between, ftype)
     proposals_per_video = load_proposals(os.path.join(proposals_dir, video_set), video, split)
+
+    if len(proposals_per_video.keys()) == 0:
+        return
+
     proposals_per_video = proposals_per_video[video]
 
     proposals_frames = sorted(list(proposals_per_video))
@@ -290,6 +294,9 @@ if __name__ == "__main__":
     parser.add_argument('--test', action='store_true')
     parser.add_argument('--n_processes', type=int, default=8)
     parser.add_argument('--output_root', type=str)
+    parser.add_argument('--start_vidx', type=int)
+    parser.add_argument('--end_vidx', type=int)
+
 
     # Detectron2 related args
     parser.add_argument("--config-file", default="configs/Misc/noNMS/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml",
@@ -396,11 +403,13 @@ if __name__ == "__main__":
     # pool.join()
 
     """
-    Without multi-processing... 
+    Without multi-processing...
     """
-    for v_idx, video in enumerate(videos):
+    if not opt.end_vidx:
+      opt.end_vidx = len(videos)
+    for v_idx, video in enumerate(videos[opt.start_vidx: opt.end_vidx]):
         logger.info("-" * 50)
-        logger.info("{0}/{1} Generating tracklets for {2}/{3} set".format(v_idx + 1, len(videos), video, video_set))
+        logger.info("{0}/{1} Generating tracklets for {2}/{3} set".format(opt.start_vidx + v_idx + 1, len(videos), video, video_set))
         if tracking == "online":
             online_tracking(proposals_dir, "", output_root, split, video_set, video,
                             similarity, embedding, distance, threshold=threshold, scoring=opt.scoring,
