@@ -258,13 +258,6 @@ def setup_cfg(args):
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = args.confidence_threshold
     cfg.MODEL.PANOPTIC_FPN.COMBINE.INSTANCES_CONFIDENCE_THRESH = args.confidence_threshold
 
-    # TEST
-    # cfg.MODEL.WEIGHTS = "/nfs/cold_project/liuyang/mots1/ResNeSt_finetune/noBackBone_COCO_dataAug/model_0007999.pth"
-    # cfg.MODEL.WEIGHTS = "/nfs/cold_project/liuyang/detectron2_weights/" \
-    #                     "mask_cascade_rcnn_ResNeSt_200_FPN_dcn_syncBN_all_tricks_3x-e1901134.pth"
-    # cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1
-    # END of TEST
-
     cfg.freeze()
     return cfg
 
