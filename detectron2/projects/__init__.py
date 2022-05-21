@@ -1,9 +1,13 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
+# Copyright (c) Facebook, Inc. and its affiliates.
 import importlib
 from pathlib import Path
 
-_PROJECTS = {"point_rend": "PointRend", "deeplab": "DeepLab"}
-_PROJECT_ROOT = Path(__file__).parent.parent.parent / "projects"
+_PROJECTS = {
+    "point_rend": "PointRend",
+    "deeplab": "DeepLab",
+    "panoptic_deeplab": "Panoptic-DeepLab",
+}
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent / "projects"
 
 if _PROJECT_ROOT.is_dir():
     # This is true only for in-place installation (pip install -e, setup.py develop),

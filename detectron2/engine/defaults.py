@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 
 """
 This file contains components with some default boilerplate logic user may need
@@ -13,14 +13,17 @@ import argparse
 import logging
 import os
 import sys
+import weakref
 from collections import OrderedDict
+from typing import Optional
 import torch
-from fvcore.common.file_io import PathManager
 from fvcore.nn.precise_bn import get_bn_modules
+from omegaconf import OmegaConf
 from torch.nn.parallel import DistributedDataParallel
 
 import detectron2.data.transforms as T
 from detectron2.checkpoint import DetectionCheckpointer
+from detectron2.config import CfgNode, LazyConfig
 from detectron2.data import (
     MetadataCatalog,
     build_detection_test_loader,
@@ -38,12 +41,42 @@ from detectron2.utils import comm
 from detectron2.utils.collect_env import collect_env_info
 from detectron2.utils.env import seed_all_rng
 from detectron2.utils.events import CommonMetricPrinter, JSONWriter, TensorboardXWriter
+from detectron2.utils.file_io import PathManager
 from detectron2.utils.logger import setup_logger
 
 from . import hooks
-from .train_loop import SimpleTrainer
+from .train_loop import AMPTrainer, SimpleTrainer, TrainerBase
 
-__all__ = ["default_argument_parser", "default_setup", "DefaultPredictor", "DefaultTrainer"]
+__all__ = [
+    "create_ddp_model",
+    "default_argument_parser",
+    "default_setup",
+    "default_writers",
+    "DefaultPredictor",
+    "DefaultTrainer",
+]
+
+
+def create_ddp_model(model, *, fp16_compression=False, **kwargs):
+    """
+    Create a DistributedDataParallel model if there are >1 processes.
+
+    Args:
+        model: a torch.nn.Module
+        fp16_compression: add fp16 compression hooks to the ddp object.
+            See more at https://pytorch.org/docs/stable/ddp_comm_hooks.html#torch.distributed.algorithms.ddp_comm_hooks.default_hooks.fp16_compress_hook
+        kwargs: other arguments of :module:`torch.nn.parallel.DistributedDataParallel`.
+    """  # noqa
+    if comm.get_world_size() == 1:
+        return model
+    if "device_ids" not in kwargs:
+        kwargs["device_ids"] = [comm.get_local_rank()]
+    ddp = DistributedDataParallel(model, **kwargs)
+    if fp16_compression:
+        from torch.distributed.algorithms.ddp_comm_hooks import default as comm_hooks
+
+        ddp.register_comm_hook(state=None, hook=comm_hooks.fp16_compress_hook)
+    return ddp
 
 
 def default_argument_parser(epilog=None):
@@ -62,7 +95,10 @@ def default_argument_parser(epilog=None):
 Examples:
 
 Run on single machine:
-    $ {sys.argv[0]} --num-gpus 8 --config-file cfg.yaml MODEL.WEIGHTS /path/to/weight.pth
+    $ {sys.argv[0]} --num-gpus 8 --config-file cfg.yaml
+
+Change some config options:
+    $ {sys.argv[0]} --config-file cfg.yaml MODEL.WEIGHTS /path/to/weight.pth SOLVER.BASE_LR 0.001
 
 Run on multiple machines:
     (machine0)$ {sys.argv[0]} --machine-rank 0 --num-machines 2 --dist-url <URL> [--other-flags]
@@ -74,7 +110,8 @@ Run on multiple machines:
     parser.add_argument(
         "--resume",
         action="store_true",
-        help="whether to attempt to resume from the checkpoint directory",
+        help="Whether to attempt to resume from the checkpoint directory. "
+        "See documentation of `DefaultTrainer.resume_or_load()` for what it means.",
     )
     parser.add_argument("--eval-only", action="store_true", help="perform evaluation only")
     parser.add_argument("--num-gpus", type=int, default=1, help="number of gpus *per machine*")
@@ -95,11 +132,43 @@ Run on multiple machines:
     )
     parser.add_argument(
         "opts",
-        help="Modify config options using the command-line",
+        help="""
+Modify config options at the end of the command. For Yacs configs, use
+space-separated "PATH.KEY VALUE" pairs.
+For python-based LazyConfig, use "path.key=value".
+        """.strip(),
         default=None,
         nargs=argparse.REMAINDER,
     )
     return parser
+
+
+def _try_get_key(cfg, *keys, default=None):
+    """
+    Try select keys from cfg until the first key that exists. Otherwise return default.
+    """
+    if isinstance(cfg, CfgNode):
+        cfg = OmegaConf.create(cfg.dump())
+    for k in keys:
+        none = object()
+        p = OmegaConf.select(cfg, k, default=none)
+        if p is not none:
+            return p
+    return default
+
+
+def _highlight(code, filename):
+    try:
+        import pygments
+    except ImportError:
+        return code
+
+    from pygments.lexers import Python3Lexer, YamlLexer
+    from pygments.formatters import Terminal256Formatter
+
+    lexer = Python3Lexer() if filename.endswith(".py") else YamlLexer()
+    code = pygments.highlight(code, lexer, Terminal256Formatter(style="monokai"))
+    return code
 
 
 def default_setup(cfg, args):
@@ -111,10 +180,10 @@ def default_setup(cfg, args):
     3. Backup the config to the output directory
 
     Args:
-        cfg (CfgNode): the full config to be used
+        cfg (CfgNode or omegaconf.DictConfig): the full config to be used
         args (argparse.NameSpace): the command line arguments to be logged
     """
-    output_dir = cfg.OUTPUT_DIR
+    output_dir = _try_get_key(cfg, "OUTPUT_DIR", "output_dir", "train.output_dir")
     if comm.is_main_process() and output_dir:
         PathManager.mkdirs(output_dir)
 
@@ -129,26 +198,55 @@ def default_setup(cfg, args):
     if hasattr(args, "config_file") and args.config_file != "":
         logger.info(
             "Contents of args.config_file={}:\n{}".format(
-                args.config_file, PathManager.open(args.config_file, "r").read()
+                args.config_file,
+                _highlight(PathManager.open(args.config_file, "r").read(), args.config_file),
             )
         )
 
-    logger.info("Running with full config:\n{}".format(cfg))
     if comm.is_main_process() and output_dir:
         # Note: some of our scripts may expect the existence of
         # config.yaml in output directory
         path = os.path.join(output_dir, "config.yaml")
-        with PathManager.open(path, "w") as f:
-            f.write(cfg.dump())
+        if isinstance(cfg, CfgNode):
+            logger.info("Running with full config:\n{}".format(_highlight(cfg.dump(), ".yaml")))
+            with PathManager.open(path, "w") as f:
+                f.write(cfg.dump())
+        else:
+            LazyConfig.save(cfg, path)
         logger.info("Full config saved to {}".format(path))
 
     # make sure each worker has a different, yet deterministic seed if specified
-    seed_all_rng(None if cfg.SEED < 0 else cfg.SEED + rank)
+    seed = _try_get_key(cfg, "SEED", "train.seed", default=-1)
+    seed_all_rng(None if seed < 0 else seed + rank)
 
     # cudnn benchmark has large overhead. It shouldn't be used considering the small size of
     # typical validation set.
     if not (hasattr(args, "eval_only") and args.eval_only):
-        torch.backends.cudnn.benchmark = cfg.CUDNN_BENCHMARK
+        torch.backends.cudnn.benchmark = _try_get_key(
+            cfg, "CUDNN_BENCHMARK", "train.cudnn_benchmark", default=False
+        )
+
+
+def default_writers(output_dir: str, max_iter: Optional[int] = None):
+    """
+    Build a list of :class:`EventWriter` to be used.
+    It now consists of a :class:`CommonMetricPrinter`,
+    :class:`TensorboardXWriter` and :class:`JSONWriter`.
+
+    Args:
+        output_dir: directory to store JSON metrics and tensorboard events
+        max_iter: the total number of iterations
+
+    Returns:
+        list[EventWriter]: a list of :class:`EventWriter` objects.
+    """
+    PathManager.mkdirs(output_dir)
+    return [
+        # It may not always print what you want to see, since it prints "common" metrics only.
+        CommonMetricPrinter(max_iter),
+        JSONWriter(os.path.join(output_dir, "metrics.json")),
+        TensorboardXWriter(output_dir),
+    ]
 
 
 class DefaultPredictor:
@@ -163,8 +261,10 @@ class DefaultPredictor:
     3. Apply resizing defined by `cfg.INPUT.{MIN,MAX}_SIZE_TEST`.
     4. Take one input image and produce a single output, instead of a batch.
 
-    If you'd like to do anything more fancy, please refer to its source code
-    as examples to build and use the model manually.
+    This is meant for simple demo purposes, so it does the above steps automatically.
+    This is not meant for benchmarks or running complicated inference logic.
+    If you'd like to do anything more complicated, please refer to its source code as
+    examples to build and use the model manually.
 
     Attributes:
         metadata (Metadata): the metadata of the underlying dataset, obtained from
@@ -218,14 +318,13 @@ class DefaultPredictor:
             return predictions
 
 
-class DefaultTrainer(SimpleTrainer):
+class DefaultTrainer(TrainerBase):
     """
-    A trainer with default training logic.
-    It is a subclass of :class:`SimpleTrainer` and instantiates everything needed from the
-    config. It does the following:
+    A trainer with default training logic. It does the following:
 
-    1. Create model, optimizer, scheduler, dataloader from the given config.
-    2. Load a checkpoint or `cfg.MODEL.WEIGHTS`, if exists, when
+    1. Create a :class:`SimpleTrainer` using model, optimizer, dataloader
+       defined by the given config. Create a LR scheduler defined by the config.
+    2. Load the last checkpoint or `cfg.MODEL.WEIGHTS`, if exists, when
        `resume_or_load` is called.
     3. Register a few common hooks defined by the config.
 
@@ -267,31 +366,28 @@ class DefaultTrainer(SimpleTrainer):
         Args:
             cfg (CfgNode):
         """
+        super().__init__()
         logger = logging.getLogger("detectron2")
         if not logger.isEnabledFor(logging.INFO):  # setup_logger is not called for d2
             setup_logger()
         cfg = DefaultTrainer.auto_scale_workers(cfg, comm.get_world_size())
+
         # Assume these objects must be constructed in this order.
         model = self.build_model(cfg)
         optimizer = self.build_optimizer(cfg, model)
         data_loader = self.build_train_loader(cfg)
 
-        # For training, wrap with DDP. But don't need this for inference.
-        if comm.get_world_size() > 1:
-            model = DistributedDataParallel(
-                model, device_ids=[comm.get_local_rank()], broadcast_buffers=False
-            )
-        super().__init__(model, data_loader, optimizer)
+        model = create_ddp_model(model, broadcast_buffers=False)
+        self._trainer = (AMPTrainer if cfg.SOLVER.AMP.ENABLED else SimpleTrainer)(
+            model, data_loader, optimizer
+        )
 
         self.scheduler = self.build_lr_scheduler(cfg, optimizer)
-        # Assume no other objects need to be checkpointed.
-        # We can later make it checkpoint the stateful hooks
         self.checkpointer = DetectionCheckpointer(
             # Assume you want to save checkpoints together with logs/statistics
             model,
             cfg.OUTPUT_DIR,
-            optimizer=optimizer,
-            scheduler=self.scheduler,
+            trainer=weakref.proxy(self),
         )
         self.start_iter = 0
         self.max_iter = cfg.SOLVER.MAX_ITER
@@ -301,21 +397,23 @@ class DefaultTrainer(SimpleTrainer):
 
     def resume_or_load(self, resume=True):
         """
-        If `resume==True`, and last checkpoint exists, resume from it, load all checkpointables
-        (eg. optimizer and scheduler) and update iteration counter from it. ``cfg.MODEL.WEIGHTS``
-        will not be used.
+        If `resume==True` and `cfg.OUTPUT_DIR` contains the last checkpoint (defined by
+        a `last_checkpoint` file), resume from the file. Resuming means loading all
+        available states (eg. optimizer and scheduler) and update iteration counter
+        from the checkpoint. ``cfg.MODEL.WEIGHTS`` will not be used.
 
-        Otherwise, load the model specified by the config (skip all checkpointables) and start from
-        the first iteration.
+        Otherwise, this is considered as an independent training. The method will load model
+        weights from the file `cfg.MODEL.WEIGHTS` (but will not load other states) and start
+        from iteration 0.
 
         Args:
             resume (bool): whether to do resume or not
         """
-        checkpoint = self.checkpointer.resume_or_load(self.cfg.MODEL.WEIGHTS, resume=resume)
+        self.checkpointer.resume_or_load(self.cfg.MODEL.WEIGHTS, resume=resume)
         if resume and self.checkpointer.has_checkpoint():
-            self.start_iter = checkpoint.get("iteration", -1) + 1
             # The checkpoint stores the training iteration that just finished, thus we start
-            # at the next iteration (or iter zero if there's no checkpoint).
+            # at the next iteration
+            self.start_iter = self.iter + 1
 
     def build_hooks(self):
         """
@@ -331,7 +429,7 @@ class DefaultTrainer(SimpleTrainer):
 
         ret = [
             hooks.IterationTimer(),
-            hooks.LRScheduler(self.optimizer, self.scheduler),
+            hooks.LRScheduler(),
             hooks.PreciseBN(
                 # Run at the same freq as (but before) evaluation.
                 cfg.TEST.EVAL_PERIOD,
@@ -360,37 +458,21 @@ class DefaultTrainer(SimpleTrainer):
         ret.append(hooks.EvalHook(cfg.TEST.EVAL_PERIOD, test_and_save_results))
 
         if comm.is_main_process():
+            # Here the default print/log frequency of each writer is used.
             # run writers in the end, so that evaluation metrics are written
             ret.append(hooks.PeriodicWriter(self.build_writers(), period=20))
         return ret
 
     def build_writers(self):
         """
-        Build a list of writers to be used. By default it contains
-        writers that write metrics to the screen,
-        a json file, and a tensorboard event file respectively.
+        Build a list of writers to be used using :func:`default_writers()`.
         If you'd like a different list of writers, you can overwrite it in
         your trainer.
 
         Returns:
             list[EventWriter]: a list of :class:`EventWriter` objects.
-
-        It is now implemented by:
-        ::
-            return [
-                CommonMetricPrinter(self.max_iter),
-                JSONWriter(os.path.join(self.cfg.OUTPUT_DIR, "metrics.json")),
-                TensorboardXWriter(self.cfg.OUTPUT_DIR),
-            ]
-
         """
-        # Here the default print/log frequency of each writer is used.
-        return [
-            # It may not always print what you want to see, since it prints "common" metrics only.
-            CommonMetricPrinter(self.max_iter),
-            JSONWriter(os.path.join(self.cfg.OUTPUT_DIR, "metrics.json")),
-            TensorboardXWriter(self.cfg.OUTPUT_DIR),
-        ]
+        return default_writers(self.cfg.OUTPUT_DIR, self.max_iter)
 
     def train(self):
         """
@@ -406,6 +488,19 @@ class DefaultTrainer(SimpleTrainer):
             ), "No evaluation results obtained during training!"
             verify_results(self.cfg, self._last_eval_results)
             return self._last_eval_results
+
+    def run_step(self):
+        self._trainer.iter = self.iter
+        self._trainer.run_step()
+
+    def state_dict(self):
+        ret = super().state_dict()
+        ret["_trainer"] = self._trainer.state_dict()
+        return ret
+
+    def load_state_dict(self, state_dict):
+        super().load_state_dict(state_dict)
+        self._trainer.load_state_dict(state_dict["_trainer"])
 
     @classmethod
     def build_model(cls, cfg):
@@ -481,12 +576,15 @@ Alternatively, you can call evaluation functions yourself (see Colab balloon tut
     @classmethod
     def test(cls, cfg, model, evaluators=None):
         """
+        Evaluate the given model. The given model is expected to already contain
+        weights to evaluate.
+
         Args:
             cfg (CfgNode):
             model (nn.Module):
             evaluators (list[DatasetEvaluator] or None): if None, will call
                 :meth:`build_evaluator`. Otherwise, must have the same length as
-                `cfg.DATASETS.TEST`.
+                ``cfg.DATASETS.TEST``.
 
         Returns:
             dict: a dict of result metrics
@@ -544,10 +642,34 @@ Alternatively, you can call evaluation functions yourself (see Colab balloon tut
         * training steps and warmup steps are scaled inverse proportionally.
         * learning rate are scaled proportionally, following :paper:`ImageNet in 1h`.
 
-        It returns the original config if ``cfg.SOLVER.REFERENCE_WORLD_SIZE==0``.
+        For example, with the original config like the following:
+
+        .. code-block:: yaml
+
+            IMS_PER_BATCH: 16
+            BASE_LR: 0.1
+            REFERENCE_WORLD_SIZE: 8
+            MAX_ITER: 5000
+            STEPS: (4000,)
+            CHECKPOINT_PERIOD: 1000
+
+        When this config is used on 16 GPUs instead of the reference number 8,
+        calling this method will return a new config with:
+
+        .. code-block:: yaml
+
+            IMS_PER_BATCH: 32
+            BASE_LR: 0.2
+            REFERENCE_WORLD_SIZE: 16
+            MAX_ITER: 2500
+            STEPS: (2000,)
+            CHECKPOINT_PERIOD: 500
+
+        Note that both the original config and this new config can be trained on 16 GPUs.
+        It's up to user whether to enable this feature (by setting ``REFERENCE_WORLD_SIZE``).
 
         Returns:
-            CfgNode: a new config
+            CfgNode: a new config. Same as original if ``cfg.SOLVER.REFERENCE_WORLD_SIZE==0``.
         """
         old_world_size = cfg.SOLVER.REFERENCE_WORLD_SIZE
         if old_world_size == 0 or old_world_size == num_workers:
@@ -566,6 +688,7 @@ Alternatively, you can call evaluation functions yourself (see Colab balloon tut
         warmup_iter = cfg.SOLVER.WARMUP_ITERS = int(round(cfg.SOLVER.WARMUP_ITERS / scale))
         cfg.SOLVER.STEPS = tuple(int(round(s / scale)) for s in cfg.SOLVER.STEPS)
         cfg.TEST.EVAL_PERIOD = int(round(cfg.TEST.EVAL_PERIOD / scale))
+        cfg.SOLVER.CHECKPOINT_PERIOD = int(round(cfg.SOLVER.CHECKPOINT_PERIOD / scale))
         cfg.SOLVER.REFERENCE_WORLD_SIZE = num_workers  # maintain invariant
         logger = logging.getLogger(__name__)
         logger.info(
@@ -576,3 +699,17 @@ Alternatively, you can call evaluation functions yourself (see Colab balloon tut
         if frozen:
             cfg.freeze()
         return cfg
+
+
+# Access basic attributes from the underlying trainer
+for _attr in ["model", "data_loader", "optimizer"]:
+    setattr(
+        DefaultTrainer,
+        _attr,
+        property(
+            # getter
+            lambda self, x=_attr: getattr(self._trainer, x),
+            # setter
+            lambda self, value, x=_attr: setattr(self._trainer, x, value),
+        ),
+    )

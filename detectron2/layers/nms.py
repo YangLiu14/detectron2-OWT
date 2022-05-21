@@ -1,56 +1,23 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 
-from typing import List
 import torch
 from torchvision.ops import boxes as box_ops
-from torchvision.ops import nms  # BC-compat
-
-
-def batch_nms_based_on_BackgroundScores(
-        boxes: torch.Tensor, bg_scores: torch.Tensor, idxs: torch.Tensor, iou_threshold: float
-):
-    """
-    Same as batched_nms, but using (1 - background_scores) as filter criterion
-    """
-    assert boxes.shape[-1] == 4
-
-    # TODO: finish the modification of the following section
-    result_mask = bg_scores.new_zeros(bg_scores.size(), dtype=torch.bool)
-    # for id in torch.jit.annotate(List[int], torch.unique(idxs).cpu().tolist()):
-    #     mask = (idxs == id).nonzero().view(-1)
-    #     keep = nms(boxes[mask], bg_scores[mask], iou_threshold)
-    #     result_mask[mask[keep]] = True
-
-    keep = nms(boxes, 1 - bg_scores, iou_threshold)
-    test = keep
-    result_mask[keep] = True
-    # keep = result_mask.nonzero().view(-1)
-    # keep = keep[bg_scores[keep].argsort(descending=True)]
-    keep = keep[bg_scores[keep].argsort()]
-    return keep
+from torchvision.ops import nms  # noqa . for compatibility
 
 
 def batched_nms(
     boxes: torch.Tensor, scores: torch.Tensor, idxs: torch.Tensor, iou_threshold: float
 ):
     """
-    Same as torchvision.ops.boxes.batched_nms, but safer.
+    Same as torchvision.ops.boxes.batched_nms, but with float().
     """
     assert boxes.shape[-1] == 4
-    # TODO may need better strategy.
-    # Investigate after having a fully-cuda NMS op.
-    if len(boxes) < 40000:
-        return box_ops.batched_nms(boxes, scores, idxs, iou_threshold)
-
-    result_mask = scores.new_zeros(scores.size(), dtype=torch.bool)
-    for id in torch.jit.annotate(List[int], torch.unique(idxs).cpu().tolist()):
-        mask = (idxs == id).nonzero().view(-1)
-        keep = nms(boxes[mask], scores[mask], iou_threshold)
-        result_mask[mask[keep]] = True
-    keep = result_mask.nonzero().view(-1)
-    keep = keep[scores[keep].argsort(descending=True)]
-    return keep
+    # Note: Torchvision already has a strategy (https://github.com/pytorch/vision/issues/1311)
+    # to decide whether to use coordinate trick or for loop to implement batched_nms. So we
+    # just call it directly.
+    # Fp16 does not have enough range for batched NMS, so adding float().
+    return box_ops.batched_nms(boxes.float(), scores, idxs, iou_threshold)
 
 
 # Note: this function (nms_rotated) might be moved into
@@ -116,9 +83,7 @@ def nms_rotated(boxes, scores, iou_threshold):
         keep (Tensor): int64 tensor with the indices of the elements that have been kept
         by Rotated NMS, sorted in decreasing order of scores
     """
-    from detectron2 import _C
-
-    return _C.nms_rotated(boxes, scores, iou_threshold)
+    return torch.ops.detectron2.nms_rotated(boxes, scores, iou_threshold)
 
 
 # Note: this function (batched_nms_rotated) might be moved into
@@ -151,6 +116,7 @@ def batched_nms_rotated(boxes, scores, idxs, iou_threshold):
 
     if boxes.numel() == 0:
         return torch.empty((0,), dtype=torch.int64, device=boxes.device)
+    boxes = boxes.float()  # fp16 does not have enough range for batched NMS
     # Strategy: in order to perform NMS independently per class,
     # we add an offset to all the boxes. The offset is dependent
     # only on the class idx, and is large enough so that boxes

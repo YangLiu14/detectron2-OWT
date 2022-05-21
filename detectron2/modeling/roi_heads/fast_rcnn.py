@@ -1,18 +1,18 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 import logging
-from typing import Dict, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 import torch
-from fvcore.nn import giou_loss, smooth_l1_loss
 from torch import nn
 from torch.nn import functional as F
 
 from detectron2.config import configurable
-from detectron2.layers import Linear, ShapeSpec, batched_nms, batch_nms_based_on_BackgroundScores, cat, nonzero_tuple
-from detectron2.modeling.box_regression import Box2BoxTransform
+from detectron2.data.detection_utils import get_fed_loss_cls_weights
+from detectron2.layers import ShapeSpec, batched_nms, cat, cross_entropy, nonzero_tuple
+from detectron2.modeling.box_regression import Box2BoxTransform, _dense_box_regression_loss
 from detectron2.structures import Boxes, Instances
 from detectron2.utils.events import get_event_storage
 
-__all__ = ["fast_rcnn_inference", "fast_rcnn_inference_with_objectness", "FastRCNNOutputLayers"]
+__all__ = ["fast_rcnn_inference", "FastRCNNOutputLayers"]
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,14 @@ Naming convention:
 """
 
 
-def fast_rcnn_inference(boxes, scores, features, image_shapes, score_thresh, nms_thresh, topk_per_image):
+def fast_rcnn_inference(
+    boxes: List[torch.Tensor],
+    scores: List[torch.Tensor],
+    image_shapes: List[Tuple[int, int]],
+    score_thresh: float,
+    nms_thresh: float,
+    topk_per_image: int,
+):
     """
     Call `fast_rcnn_inference_single_image` for all images.
 
@@ -56,8 +63,6 @@ def fast_rcnn_inference(boxes, scores, features, image_shapes, score_thresh, nms
         scores (list[Tensor]): A list of Tensors of predicted class scores for each image.
             Element i has shape (Ri, K + 1), where Ri is the number of predicted objects
             for image i. Compatible with the output of :meth:`FastRCNNOutputLayers.predict_probs`.
-        features (Tensor): Has the shape (Ri, 1024). The features is extracted after the `box_head`,
-            and should be served as an appearance embedding for each proposal. (Added by Yang).
         image_shapes (list[tuple]): A list of (width, height) tuples for each image in the batch.
         score_thresh (float): Only return detections with a confidence score exceeding this
             threshold.
@@ -73,26 +78,50 @@ def fast_rcnn_inference(boxes, scores, features, image_shapes, score_thresh, nms
     """
     result_per_image = [
         fast_rcnn_inference_single_image(
-            boxes_per_image, scores_per_image, features, image_shape, score_thresh, nms_thresh, topk_per_image
+            boxes_per_image, scores_per_image, image_shape, score_thresh, nms_thresh, topk_per_image
         )
         for scores_per_image, boxes_per_image, image_shape in zip(scores, boxes, image_shapes)
     ]
     return [x[0] for x in result_per_image], [x[1] for x in result_per_image]
 
 
-# Yang's addition
-def fast_rcnn_inference_with_objectness(boxes, scores, objectness_scores, features, image_shapes, score_thresh, nms_thresh, topk_per_image):
-    result_per_image = [
-        fast_rcnn_inference_single_image_with_objectness(  # Yang's modification
-            boxes_per_image, scores_per_image, objectness_per_image, features, image_shape, score_thresh, nms_thresh, topk_per_image
-        )
-        for scores_per_image, objectness_per_image, boxes_per_image, image_shape in zip(scores, objectness_scores, boxes, image_shapes)
-    ]
-    return [x[0] for x in result_per_image], [x[1] for x in result_per_image]
+def _log_classification_stats(pred_logits, gt_classes, prefix="fast_rcnn"):
+    """
+    Log the classification metrics to EventStorage.
+
+    Args:
+        pred_logits: Rx(K+1) logits. The last column is for background class.
+        gt_classes: R labels
+    """
+    num_instances = gt_classes.numel()
+    if num_instances == 0:
+        return
+    pred_classes = pred_logits.argmax(dim=1)
+    bg_class_ind = pred_logits.shape[1] - 1
+
+    fg_inds = (gt_classes >= 0) & (gt_classes < bg_class_ind)
+    num_fg = fg_inds.nonzero().numel()
+    fg_gt_classes = gt_classes[fg_inds]
+    fg_pred_classes = pred_classes[fg_inds]
+
+    num_false_negative = (fg_pred_classes == bg_class_ind).nonzero().numel()
+    num_accurate = (pred_classes == gt_classes).nonzero().numel()
+    fg_num_accurate = (fg_pred_classes == fg_gt_classes).nonzero().numel()
+
+    storage = get_event_storage()
+    storage.put_scalar(f"{prefix}/cls_accuracy", num_accurate / num_instances)
+    if num_fg > 0:
+        storage.put_scalar(f"{prefix}/fg_cls_accuracy", fg_num_accurate / num_fg)
+        storage.put_scalar(f"{prefix}/false_negative", num_false_negative / num_fg)
 
 
 def fast_rcnn_inference_single_image(
-    boxes, scores, features, image_shape, score_thresh, nms_thresh, topk_per_image
+    boxes,
+    scores,
+    image_shape: Tuple[int, int],
+    score_thresh: float,
+    nms_thresh: float,
+    topk_per_image: int,
 ):
     """
     Single-image inference. Return bounding-box detection results by thresholding
@@ -110,396 +139,36 @@ def fast_rcnn_inference_single_image(
         boxes = boxes[valid_mask]
         scores = scores[valid_mask]
 
-    bg_scores = scores[:, -1]  # Yang's addition
     scores = scores[:, :-1]
-    num_classes = scores.shape[1] # Yang's addition
     num_bbox_reg_classes = boxes.shape[1] // 4
     # Convert to Boxes to use the `clip` function ...
     boxes = Boxes(boxes.reshape(-1, 4))
     boxes.clip(image_shape)
     boxes = boxes.tensor.view(-1, num_bbox_reg_classes, 4)  # R x C x 4
 
-    # Filter results based on detection scores
+    # 1. Filter results based on detection scores. It can make NMS more efficient
+    #    by filtering out low-confidence detections.
     filter_mask = scores > score_thresh  # R x K
     # R' x 2. First column contains indices of the R predictions;
     # Second column contains indices of classes.
-    filter_inds = filter_mask.nonzero()  # torch1.5
-    # filter_inds = torch.nonzero(filter_mask, as_tuple=False)  # torch1.6
+    filter_inds = filter_mask.nonzero()
     if num_bbox_reg_classes == 1:
         boxes = boxes[filter_inds[:, 0], 0]
     else:
         boxes = boxes[filter_mask]
     scores = scores[filter_mask]
 
-    # Apply per-class NMS
+    # 2. Apply NMS for each class independently.
     keep = batched_nms(boxes, scores, filter_inds[:, 1], nms_thresh)
     if topk_per_image >= 0:
         keep = keep[:topk_per_image]
     boxes, scores, filter_inds = boxes[keep], scores[keep], filter_inds[keep]
-    # Yang: Find out which row are keeped in the original scores tensor (1000, 80+1),
-    # and select the corresponding bg_scores
-    keep_row = torch.div(keep, num_classes)
-    bg_scores = bg_scores[keep_row]
-    features = features[keep_row]
 
     result = Instances(image_shape)
     result.pred_boxes = Boxes(boxes)
     result.scores = scores
-    result.bg_scores = bg_scores  # Yang's addition
-    result.embeddings = features  # Yang's addition
     result.pred_classes = filter_inds[:, 1]
     return result, filter_inds[:, 0]
-
-
-# Yang's addition
-def fast_rcnn_inference_single_image_with_objectness(
-    boxes, scores, objectness_scores, features, image_shape, score_thresh, nms_thresh, topk_per_image
-):
-    valid_mask = torch.isfinite(boxes).all(dim=1) & torch.isfinite(scores).all(dim=1)
-    if not valid_mask.all():
-        boxes = boxes[valid_mask]
-        scores = scores[valid_mask]
-
-    bg_scores = scores[:, -1]  # Yang's addition
-    scores = scores[:, :-1]
-    num_classes = scores.shape[1] # Yang's addition
-    num_bbox_reg_classes = boxes.shape[1] // 4
-    # Convert to Boxes to use the `clip` function ...
-    boxes = Boxes(boxes.reshape(-1, 4))
-    boxes.clip(image_shape)
-    boxes = boxes.tensor.view(-1, num_bbox_reg_classes, 4)  # R x C x 4
-
-    # Filter results based on detection scores
-    filter_mask = scores > score_thresh  # R x K
-    # R' x 2. First column contains indices of the R predictions;
-    # Second column contains indices of classes.
-    filter_inds = filter_mask.nonzero()  # torch1.5
-    # filter_inds = torch.nonzero(filter_mask, as_tuple=False)  # torch1.6
-    if num_bbox_reg_classes == 1:
-        boxes = boxes[filter_inds[:, 0], 0]
-    else:
-        boxes = boxes[filter_mask]
-    scores = scores[filter_mask]
-
-    # Apply per-class NMS
-    keep = batched_nms(boxes, scores, filter_inds[:, 1], nms_thresh)
-    if topk_per_image >= 0:
-        keep = keep[:topk_per_image]
-
-    boxes, scores, filter_inds = boxes[keep], scores[keep], filter_inds[keep]
-    # Yang: Find out which row are keeped in the original scores tensor (1000, 80+1),
-    # and select the corresponding bg_scores
-    keep_row = torch.div(keep, num_classes)
-    bg_scores = bg_scores[keep_row]
-    objectness_scores = objectness_scores[keep_row]
-    features = features[keep_row]
-
-    result = Instances(image_shape)
-    result.pred_boxes = Boxes(boxes)
-    result.scores = scores
-    result.bg_scores = bg_scores  # Yang's addition
-    result.objectness = objectness_scores  # Yang's addition
-    result.embeddings = features  # Yang's addition
-    result.pred_classes = filter_inds[:, 1]
-    return result, filter_inds[:, 0]
-
-
-def fast_rcnn_inference_single_image_based_on_BackgroundScore(
-    boxes, scores, image_shape, score_thresh, nms_thresh, topk_per_image
-):
-    """
-    Single-image inference. Return bounding-box detection results by thresholding
-    on scores and applying non-maximum suppression (NMS).
-
-    Args:
-        Same as `fast_rcnn_inference`, but with boxes, scores, and image shapes
-        per image.
-
-    Returns:
-        Same as `fast_rcnn_inference`, but for only one image.
-    """
-    valid_mask = torch.isfinite(boxes).all(dim=1) & torch.isfinite(scores).all(dim=1)
-    if not valid_mask.all():
-        boxes = boxes[valid_mask]
-        scores = scores[valid_mask]
-
-    bg_scores = scores[:, -1]  # Yang's addition
-    scores = scores[:, :-1]
-    num_classes = scores.shape[1]  # Yang's addition
-    num_bbox_reg_classes = boxes.shape[1] // 4
-    # Convert to Boxes to use the `clip` function ...
-    boxes = Boxes(boxes.reshape(-1, 4))
-    boxes.clip(image_shape)
-    boxes = boxes.tensor.view(-1, num_bbox_reg_classes, 4)  # R x C x 4
-
-    # =================================================
-    # Original filter_mask
-    # =================================================
-    # Filter results based on detection scores
-    filter_mask = scores > score_thresh  # R x K
-    # R' x 2. First column contains indices of the R predictions;
-    # Second column contains indices of classes.
-    filter_inds = filter_mask.nonzero()  # torch1.5
-    # filter_inds = torch.nonzero(filter_mask, as_tuple=False)  # torch1.6
-    if num_bbox_reg_classes == 1:
-        boxes = boxes[filter_inds[:, 0], 0]
-    else:
-        boxes = boxes[filter_mask]
-    scores = scores[filter_mask]
-    # =================================================
-    # End of Original filter_mask
-    # =================================================
-    # =================================================
-    # Replacement filter_mask (Yang)
-    # =================================================
-    # filter_mask = (1 - bg_scores) > score_thresh  # R x 1
-    # filter_inds = filter_mask.nonzero()
-    # if num_bbox_reg_classes == 1:
-    #     boxes = boxes[filter_inds[:, 0], 0]
-    # else:
-    #     boxes = boxes[filter_mask]
-    # bg_scores = bg_scores[filter_mask]
-    # =================================================
-    # End of Replacement filter_mask
-    # =================================================
-
-    # Apply per-class NMS
-    keep = batched_nms(boxes, scores, filter_inds[:, 1], nms_thresh)
-    # keep = batch_nms_based_on_BackgroundScores(boxes, bg_scores, filter_inds, nms_thresh)
-    if topk_per_image >= 0:
-        keep = keep[:topk_per_image]
-
-    boxes, scores, filter_inds = boxes[keep], scores[keep], filter_inds[keep]
-
-    import pdb; pdb.set_trace()
-    # Yang: Find out which row are keeped in the original scores tensor (1000, 80+1),
-    # and select the corresponding bg_scores
-    # keep_row = torch.div(keep, num_classes)
-    bg_scores = bg_scores[keep]
-
-    result = Instances(image_shape)
-    result.pred_boxes = Boxes(boxes)
-    result.scores = scores
-    result.bg_scores = bg_scores  # Yang's addition
-    result.pred_classes = filter_inds[:, 1]
-    return result, filter_inds[:, 0]
-
-
-class FastRCNNOutputs:
-    """
-    An internal implementation that stores information about outputs of a Fast R-CNN head,
-    and provides methods that are used to decode the outputs of a Fast R-CNN head.
-    """
-
-    def __init__(
-        self,
-        box2box_transform,
-        pred_class_logits,
-        pred_proposal_deltas,
-        proposals,
-        smooth_l1_beta=0.0,
-        box_reg_loss_type="smooth_l1",
-    ):
-        """
-        Args:
-            box2box_transform (Box2BoxTransform/Box2BoxTransformRotated):
-                box2box transform instance for proposal-to-detection transformations.
-            pred_class_logits (Tensor): A tensor of shape (R, K + 1) storing the predicted class
-                logits for all R predicted object instances.
-                Each row corresponds to a predicted object instance.
-            pred_proposal_deltas (Tensor): A tensor of shape (R, K * B) or (R, B) for
-                class-specific or class-agnostic regression. It stores the predicted deltas that
-                transform proposals into final box detections.
-                B is the box dimension (4 or 5).
-                When B is 4, each row is [dx, dy, dw, dh (, ....)].
-                When B is 5, each row is [dx, dy, dw, dh, da (, ....)].
-            proposals (list[Instances]): A list of N Instances, where Instances i stores the
-                proposals for image i, in the field "proposal_boxes".
-                When training, each Instances must have ground-truth labels
-                stored in the field "gt_classes" and "gt_boxes".
-                The total number of all instances must be equal to R.
-            smooth_l1_beta (float): The transition point between L1 and L2 loss in
-                the smooth L1 loss function. When set to 0, the loss becomes L1. When
-                set to +inf, the loss becomes constant 0.
-            box_reg_loss_type (str): Box regression loss type. One of: "smooth_l1", "giou"
-        """
-        self.box2box_transform = box2box_transform
-        self.num_preds_per_image = [len(p) for p in proposals]
-        self.pred_class_logits = pred_class_logits
-        self.pred_proposal_deltas = pred_proposal_deltas
-        self.smooth_l1_beta = smooth_l1_beta
-        self.box_reg_loss_type = box_reg_loss_type
-
-        self.image_shapes = [x.image_size for x in proposals]
-
-        if len(proposals):
-            box_type = type(proposals[0].proposal_boxes)
-            # cat(..., dim=0) concatenates over all images in the batch
-            self.proposals = box_type.cat([p.proposal_boxes for p in proposals])
-            assert (
-                not self.proposals.tensor.requires_grad
-            ), "Proposals should not require gradients!"
-
-            # The following fields should exist only when training.
-            if proposals[0].has("gt_boxes"):
-                self.gt_boxes = box_type.cat([p.gt_boxes for p in proposals])
-                assert proposals[0].has("gt_classes")
-                self.gt_classes = cat([p.gt_classes for p in proposals], dim=0)
-        else:
-            self.proposals = Boxes(torch.zeros(0, 4, device=self.pred_proposal_deltas.device))
-        self._no_instances = len(proposals) == 0  # no instances found
-
-    def _log_accuracy(self):
-        """
-        Log the accuracy metrics to EventStorage.
-        """
-        num_instances = self.gt_classes.numel()
-        pred_classes = self.pred_class_logits.argmax(dim=1)
-        bg_class_ind = self.pred_class_logits.shape[1] - 1
-
-        fg_inds = (self.gt_classes >= 0) & (self.gt_classes < bg_class_ind)
-        num_fg = fg_inds.nonzero().numel()
-        fg_gt_classes = self.gt_classes[fg_inds]
-        fg_pred_classes = pred_classes[fg_inds]
-
-        num_false_negative = (fg_pred_classes == bg_class_ind).nonzero().numel()
-        num_accurate = (pred_classes == self.gt_classes).nonzero().numel()
-        fg_num_accurate = (fg_pred_classes == fg_gt_classes).nonzero().numel()
-
-        storage = get_event_storage()
-        if num_instances > 0:
-            storage.put_scalar("fast_rcnn/cls_accuracy", num_accurate / num_instances)
-            if num_fg > 0:
-                storage.put_scalar("fast_rcnn/fg_cls_accuracy", fg_num_accurate / num_fg)
-                storage.put_scalar("fast_rcnn/false_negative", num_false_negative / num_fg)
-
-    def softmax_cross_entropy_loss(self):
-        """
-        Compute the softmax cross entropy loss for box classification.
-
-        Returns:
-            scalar Tensor
-        """
-        if self._no_instances:
-            return 0.0 * self.pred_class_logits.sum()
-        else:
-            self._log_accuracy()
-            return F.cross_entropy(self.pred_class_logits, self.gt_classes, reduction="mean")
-
-    def box_reg_loss(self):
-        """
-        Compute the smooth L1 loss for box regression.
-
-        Returns:
-            scalar Tensor
-        """
-        if self._no_instances:
-            return 0.0 * self.pred_proposal_deltas.sum()
-
-        box_dim = self.gt_boxes.tensor.size(1)  # 4 or 5
-        cls_agnostic_bbox_reg = self.pred_proposal_deltas.size(1) == box_dim
-        device = self.pred_proposal_deltas.device
-
-        bg_class_ind = self.pred_class_logits.shape[1] - 1
-
-        # Box delta loss is only computed between the prediction for the gt class k
-        # (if 0 <= k < bg_class_ind) and the target; there is no loss defined on predictions
-        # for non-gt classes and background.
-        # Empty fg_inds produces a valid loss of zero as long as the size_average
-        # arg to smooth_l1_loss is False (otherwise it uses torch.mean internally
-        # and would produce a nan loss).
-        fg_inds = nonzero_tuple((self.gt_classes >= 0) & (self.gt_classes < bg_class_ind))[0]
-        if cls_agnostic_bbox_reg:
-            # pred_proposal_deltas only corresponds to foreground class for agnostic
-            gt_class_cols = torch.arange(box_dim, device=device)
-        else:
-            fg_gt_classes = self.gt_classes[fg_inds]
-            # pred_proposal_deltas for class k are located in columns [b * k : b * k + b],
-            # where b is the dimension of box representation (4 or 5)
-            # Note that compared to Detectron1,
-            # we do not perform bounding box regression for background classes.
-            gt_class_cols = box_dim * fg_gt_classes[:, None] + torch.arange(box_dim, device=device)
-
-        if self.box_reg_loss_type == "smooth_l1":
-            gt_proposal_deltas = self.box2box_transform.get_deltas(
-                self.proposals.tensor, self.gt_boxes.tensor
-            )
-            loss_box_reg = smooth_l1_loss(
-                self.pred_proposal_deltas[fg_inds[:, None], gt_class_cols],
-                gt_proposal_deltas[fg_inds],
-                self.smooth_l1_beta,
-                reduction="sum",
-            )
-        elif self.box_reg_loss_type == "giou":
-            loss_box_reg = giou_loss(
-                self._predict_boxes()[fg_inds[:, None], gt_class_cols],
-                self.gt_boxes.tensor[fg_inds],
-                reduction="sum",
-            )
-        else:
-            raise ValueError(f"Invalid bbox reg loss type '{self.box_reg_loss_type}'")
-
-        # The loss is normalized using the total number of regions (R), not the number
-        # of foreground regions even though the box regression loss is only defined on
-        # foreground regions. Why? Because doing so gives equal training influence to
-        # each foreground example. To see how, consider two different minibatches:
-        #  (1) Contains a single foreground region
-        #  (2) Contains 100 foreground regions
-        # If we normalize by the number of foreground regions, the single example in
-        # minibatch (1) will be given 100 times as much influence as each foreground
-        # example in minibatch (2). Normalizing by the total number of regions, R,
-        # means that the single example in minibatch (1) and each of the 100 examples
-        # in minibatch (2) are given equal influence.
-        loss_box_reg = loss_box_reg / self.gt_classes.numel()
-        return loss_box_reg
-
-    def _predict_boxes(self):
-        """
-        Returns:
-            Tensor: A Tensors of predicted class-specific or class-agnostic boxes
-                for all images in a batch. Element i has shape (Ri, K * B) or (Ri, B), where Ri is
-                the number of predicted objects for image i and B is the box dimension (4 or 5)
-        """
-        return self.box2box_transform.apply_deltas(self.pred_proposal_deltas, self.proposals.tensor)
-
-    """
-    A subclass is expected to have the following methods because
-    they are used to query information about the head predictions.
-    """
-
-    def losses(self):
-        """
-        Compute the default losses for box head in Fast(er) R-CNN,
-        with softmax cross entropy loss and smooth L1 loss.
-
-        Returns:
-            A dict of losses (scalar tensors) containing keys "loss_cls" and "loss_box_reg".
-        """
-        return {"loss_cls": self.softmax_cross_entropy_loss(), "loss_box_reg": self.box_reg_loss()}
-
-    def predict_boxes(self):
-        """
-        Deprecated
-        """
-        return self._predict_boxes().split(self.num_preds_per_image, dim=0)
-
-    def predict_probs(self):
-        """
-        Deprecated
-        """
-        probs = F.softmax(self.pred_class_logits, dim=-1)
-        return probs.split(self.num_preds_per_image, dim=0)
-
-    def inference(self, score_thresh, nms_thresh, topk_per_image):
-        """
-        Deprecated
-        """
-        boxes = self.predict_boxes()
-        scores = self.predict_probs()
-        image_shapes = self.image_shapes
-        return fast_rcnn_inference(
-            boxes, scores, image_shapes, score_thresh, nms_thresh, topk_per_image
-        )
 
 
 class FastRCNNOutputLayers(nn.Module):
@@ -524,6 +193,10 @@ class FastRCNNOutputLayers(nn.Module):
         smooth_l1_beta: float = 0.0,
         box_reg_loss_type: str = "smooth_l1",
         loss_weight: Union[float, Dict[str, float]] = 1.0,
+        use_fed_loss: bool = False,
+        use_sigmoid_ce: bool = False,
+        get_fed_loss_cls_weights: Optional[Callable] = None,
+        fed_loss_num_classes: int = 50,
     ):
         """
         NOTE: this interface is experimental.
@@ -538,21 +211,32 @@ class FastRCNNOutputLayers(nn.Module):
             cls_agnostic_bbox_reg (bool): whether to use class agnostic for bbox regression
             smooth_l1_beta (float): transition point from L1 to L2 loss. Only used if
                 `box_reg_loss_type` is "smooth_l1"
-            box_reg_loss_type (str): Box regression loss type. One of: "smooth_l1", "giou"
+            box_reg_loss_type (str): Box regression loss type. One of: "smooth_l1", "giou",
+                "diou", "ciou"
             loss_weight (float|dict): weights to use for losses. Can be single float for weighting
                 all losses, or a dict of individual weightings. Valid dict keys are:
                     * "loss_cls": applied to classification loss
                     * "loss_box_reg": applied to box regression loss
+            use_fed_loss (bool): whether to use federated loss which samples additional negative
+                classes to calculate the loss
+            use_sigmoid_ce (bool): whether to calculate the loss using weighted average of binary
+                cross entropy with logits. This could be used together with federated loss
+            get_fed_loss_cls_weights (Callable): a callable which takes dataset name and frequency
+                weight power, and returns the probabilities to sample negative classes for
+                federated loss. The implementation can be found in
+                detectron2/data/detection_utils.py
+            fed_loss_num_classes (int): number of federated classes to keep in total
         """
         super().__init__()
         if isinstance(input_shape, int):  # some backward compatibility
             input_shape = ShapeSpec(channels=input_shape)
+        self.num_classes = num_classes
         input_size = input_shape.channels * (input_shape.width or 1) * (input_shape.height or 1)
         # prediction layer for num_classes foreground classes and one background class (hence + 1)
-        self.cls_score = Linear(input_size, num_classes + 1)
+        self.cls_score = nn.Linear(input_size, num_classes + 1)
         num_bbox_reg_classes = 1 if cls_agnostic_bbox_reg else num_classes
         box_dim = len(box2box_transform.weights)
-        self.bbox_pred = Linear(input_size, num_bbox_reg_classes * box_dim)
+        self.bbox_pred = nn.Linear(input_size, num_bbox_reg_classes * box_dim)
 
         nn.init.normal_(self.cls_score.weight, std=0.01)
         nn.init.normal_(self.bbox_pred.weight, std=0.001)
@@ -568,6 +252,17 @@ class FastRCNNOutputLayers(nn.Module):
         if isinstance(loss_weight, float):
             loss_weight = {"loss_cls": loss_weight, "loss_box_reg": loss_weight}
         self.loss_weight = loss_weight
+        self.use_fed_loss = use_fed_loss
+        self.use_sigmoid_ce = use_sigmoid_ce
+        self.fed_loss_num_classes = fed_loss_num_classes
+
+        if self.use_fed_loss:
+            assert self.use_sigmoid_ce, "Please use sigmoid cross entropy loss with federated loss"
+            fed_loss_cls_weights = get_fed_loss_cls_weights()
+            assert (
+                len(fed_loss_cls_weights) == self.num_classes
+            ), "Please check the provided fed_loss_cls_weights. Their size should match num_classes"
+            self.register_buffer("fed_loss_cls_weights", fed_loss_cls_weights)
 
     @classmethod
     def from_config(cls, cfg, input_shape):
@@ -575,14 +270,18 @@ class FastRCNNOutputLayers(nn.Module):
             "input_shape": input_shape,
             "box2box_transform": Box2BoxTransform(weights=cfg.MODEL.ROI_BOX_HEAD.BBOX_REG_WEIGHTS),
             # fmt: off
-            "num_classes"           : cfg.MODEL.ROI_HEADS.NUM_CLASSES,
-            "cls_agnostic_bbox_reg" : cfg.MODEL.ROI_BOX_HEAD.CLS_AGNOSTIC_BBOX_REG,
-            "smooth_l1_beta"        : cfg.MODEL.ROI_BOX_HEAD.SMOOTH_L1_BETA,
-            "test_score_thresh"     : cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST,
-            "test_nms_thresh"       : cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST,
-            "test_topk_per_image"   : cfg.TEST.DETECTIONS_PER_IMAGE,
-            "box_reg_loss_type"     : cfg.MODEL.ROI_BOX_HEAD.BBOX_REG_LOSS_TYPE,
-            "loss_weight"           : {"loss_box_reg": cfg.MODEL.ROI_BOX_HEAD.BBOX_REG_LOSS_WEIGHT},
+            "num_classes"               : cfg.MODEL.ROI_HEADS.NUM_CLASSES,
+            "cls_agnostic_bbox_reg"     : cfg.MODEL.ROI_BOX_HEAD.CLS_AGNOSTIC_BBOX_REG,
+            "smooth_l1_beta"            : cfg.MODEL.ROI_BOX_HEAD.SMOOTH_L1_BETA,
+            "test_score_thresh"         : cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST,
+            "test_nms_thresh"           : cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST,
+            "test_topk_per_image"       : cfg.TEST.DETECTIONS_PER_IMAGE,
+            "box_reg_loss_type"         : cfg.MODEL.ROI_BOX_HEAD.BBOX_REG_LOSS_TYPE,
+            "loss_weight"               : {"loss_box_reg": cfg.MODEL.ROI_BOX_HEAD.BBOX_REG_LOSS_WEIGHT},  # noqa
+            "use_fed_loss"              : cfg.MODEL.ROI_BOX_HEAD.USE_FED_LOSS,
+            "use_sigmoid_ce"            : cfg.MODEL.ROI_BOX_HEAD.USE_SIGMOID_CE,
+            "get_fed_loss_cls_weights"  : lambda: get_fed_loss_cls_weights(dataset_names=cfg.DATASETS.TRAIN, freq_weight_power=cfg.MODEL.ROI_BOX_HEAD.FED_LOSS_FREQ_WEIGHT_POWER),  # noqa
+            "fed_loss_num_classes"      : cfg.MODEL.ROI_BOX_HEAD.FED_LOSS_NUM_CLASSES,
             # fmt: on
         }
 
@@ -605,7 +304,6 @@ class FastRCNNOutputLayers(nn.Module):
         proposal_deltas = self.bbox_pred(x)
         return scores, proposal_deltas
 
-    # TODO: move the implementation to this class.
     def losses(self, predictions, proposals):
         """
         Args:
@@ -618,17 +316,151 @@ class FastRCNNOutputLayers(nn.Module):
             Dict[str, Tensor]: dict of losses
         """
         scores, proposal_deltas = predictions
-        losses = FastRCNNOutputs(
-            self.box2box_transform,
-            scores,
-            proposal_deltas,
-            proposals,
-            self.smooth_l1_beta,
-            self.box_reg_loss_type,
-        ).losses()
+
+        # parse classification outputs
+        gt_classes = (
+            cat([p.gt_classes for p in proposals], dim=0) if len(proposals) else torch.empty(0)
+        )
+        _log_classification_stats(scores, gt_classes)
+
+        # parse box regression outputs
+        if len(proposals):
+            proposal_boxes = cat([p.proposal_boxes.tensor for p in proposals], dim=0)  # Nx4
+            assert not proposal_boxes.requires_grad, "Proposals should not require gradients!"
+            # If "gt_boxes" does not exist, the proposals must be all negative and
+            # should not be included in regression loss computation.
+            # Here we just use proposal_boxes as an arbitrary placeholder because its
+            # value won't be used in self.box_reg_loss().
+            gt_boxes = cat(
+                [(p.gt_boxes if p.has("gt_boxes") else p.proposal_boxes).tensor for p in proposals],
+                dim=0,
+            )
+        else:
+            proposal_boxes = gt_boxes = torch.empty((0, 4), device=proposal_deltas.device)
+
+        if self.use_sigmoid_ce:
+            loss_cls = self.sigmoid_cross_entropy_loss(scores, gt_classes)
+        else:
+            loss_cls = cross_entropy(scores, gt_classes, reduction="mean")
+
+        losses = {
+            "loss_cls": loss_cls,
+            "loss_box_reg": self.box_reg_loss(
+                proposal_boxes, gt_boxes, proposal_deltas, gt_classes
+            ),
+        }
         return {k: v * self.loss_weight.get(k, 1.0) for k, v in losses.items()}
 
-    def inference(self, predictions, proposals):
+    # Implementation from https://github.com/xingyizhou/CenterNet2/blob/master/projects/CenterNet2/centernet/modeling/roi_heads/fed_loss.py  # noqa
+    # with slight modifications
+    def get_fed_loss_classes(self, gt_classes, num_fed_loss_classes, num_classes, weight):
+        """
+        Args:
+            gt_classes: a long tensor of shape R that contains the gt class label of each proposal.
+            num_fed_loss_classes: number of classes to keep in total, including both unique gt
+                classes and sampled negative classes
+            num_classes: number of foreground classes
+            weight: probabilities used to sample negative classes
+
+        Returns:
+            Tensor:
+                classes to keep when calculating the federated loss, including both unique gt
+                classes and sampled negative classes.
+        """
+        unique_gt_classes = torch.unique(gt_classes)
+        prob = unique_gt_classes.new_ones(num_classes + 1).float()
+        prob[-1] = 0
+        if len(unique_gt_classes) < num_fed_loss_classes:
+            prob[:num_classes] = weight.float().clone()
+            prob[unique_gt_classes] = 0
+            sampled_negative_classes = torch.multinomial(
+                prob, num_fed_loss_classes - len(unique_gt_classes), replacement=False
+            )
+            fed_loss_classes = torch.cat([unique_gt_classes, sampled_negative_classes])
+        return fed_loss_classes
+
+    # Implementation from https://github.com/xingyizhou/CenterNet2/blob/master/projects/CenterNet2/centernet/modeling/roi_heads/custom_fast_rcnn.py#L113  # noqa
+    # with slight modifications
+    def sigmoid_cross_entropy_loss(self, pred_class_logits, gt_classes):
+        """
+        Args:
+            pred_class_logits: shape (N, K+1), scores for each of the N box. Each row contains the
+            scores for K object categories and 1 background class
+            gt_classes: a long tensor of shape R that contains the gt class label of each proposal.
+        """
+        if pred_class_logits.numel() == 0:
+            return pred_class_logits.new_zeros([1])[0]
+
+        N = pred_class_logits.shape[0]
+        K = pred_class_logits.shape[1] - 1
+
+        target = pred_class_logits.new_zeros(N, K + 1)
+        target[range(len(gt_classes)), gt_classes] = 1
+        target = target[:, :K]
+
+        cls_loss = F.binary_cross_entropy_with_logits(
+            pred_class_logits[:, :-1], target, reduction="none"
+        )
+
+        if self.use_fed_loss:
+            fed_loss_classes = self.get_fed_loss_classes(
+                gt_classes,
+                num_fed_loss_classes=self.fed_loss_num_classes,
+                num_classes=K,
+                weight=self.fed_loss_cls_weights,
+            )
+            fed_loss_classes_mask = fed_loss_classes.new_zeros(K + 1)
+            fed_loss_classes_mask[fed_loss_classes] = 1
+            fed_loss_classes_mask = fed_loss_classes_mask[:K]
+            weight = fed_loss_classes_mask.view(1, K).expand(N, K).float()
+        else:
+            weight = 1
+
+        loss = torch.sum(cls_loss * weight) / N
+        return loss
+
+    def box_reg_loss(self, proposal_boxes, gt_boxes, pred_deltas, gt_classes):
+        """
+        Args:
+            proposal_boxes/gt_boxes are tensors with the same shape (R, 4 or 5).
+            pred_deltas has shape (R, 4 or 5), or (R, num_classes * (4 or 5)).
+            gt_classes is a long tensor of shape R, the gt class label of each proposal.
+            R shall be the number of proposals.
+        """
+        box_dim = proposal_boxes.shape[1]  # 4 or 5
+        # Regression loss is only computed for foreground proposals (those matched to a GT)
+        fg_inds = nonzero_tuple((gt_classes >= 0) & (gt_classes < self.num_classes))[0]
+        if pred_deltas.shape[1] == box_dim:  # cls-agnostic regression
+            fg_pred_deltas = pred_deltas[fg_inds]
+        else:
+            fg_pred_deltas = pred_deltas.view(-1, self.num_classes, box_dim)[
+                fg_inds, gt_classes[fg_inds]
+            ]
+
+        loss_box_reg = _dense_box_regression_loss(
+            [proposal_boxes[fg_inds]],
+            self.box2box_transform,
+            [fg_pred_deltas.unsqueeze(0)],
+            [gt_boxes[fg_inds]],
+            ...,
+            self.box_reg_loss_type,
+            self.smooth_l1_beta,
+        )
+
+        # The reg loss is normalized using the total number of regions (R), not the number
+        # of foreground regions even though the box regression loss is only defined on
+        # foreground regions. Why? Because doing so gives equal training influence to
+        # each foreground example. To see how, consider two different minibatches:
+        #  (1) Contains a single foreground region
+        #  (2) Contains 100 foreground regions
+        # If we normalize by the number of foreground regions, the single example in
+        # minibatch (1) will be given 100 times as much influence as each foreground
+        # example in minibatch (2). Normalizing by the total number of regions, R,
+        # means that the single example in minibatch (1) and each of the 100 examples
+        # in minibatch (2) are given equal influence.
+        return loss_box_reg / max(gt_classes.numel(), 1.0)  # return 0 if empty
+
+    def inference(self, predictions: Tuple[torch.Tensor, torch.Tensor], proposals: List[Instances]):
         """
         Args:
             predictions: return values of :meth:`forward()`.
@@ -667,8 +499,7 @@ class FastRCNNOutputLayers(nn.Module):
         if not len(proposals):
             return []
         scores, proposal_deltas = predictions
-        proposal_boxes = [p.proposal_boxes for p in proposals]
-        proposal_boxes = proposal_boxes[0].cat(proposal_boxes).tensor
+        proposal_boxes = cat([p.proposal_boxes.tensor for p in proposals], dim=0)
         N, B = proposal_boxes.shape
         predict_boxes = self.box2box_transform.apply_deltas(
             proposal_deltas, proposal_boxes
@@ -687,7 +518,9 @@ class FastRCNNOutputLayers(nn.Module):
         num_prop_per_image = [len(p) for p in proposals]
         return predict_boxes.split(num_prop_per_image)
 
-    def predict_boxes(self, predictions, proposals):
+    def predict_boxes(
+        self, predictions: Tuple[torch.Tensor, torch.Tensor], proposals: List[Instances]
+    ):
         """
         Args:
             predictions: return values of :meth:`forward()`.
@@ -704,14 +537,16 @@ class FastRCNNOutputLayers(nn.Module):
             return []
         _, proposal_deltas = predictions
         num_prop_per_image = [len(p) for p in proposals]
-        proposal_boxes = [p.proposal_boxes for p in proposals]
-        proposal_boxes = proposal_boxes[0].cat(proposal_boxes).tensor
+        proposal_boxes = cat([p.proposal_boxes.tensor for p in proposals], dim=0)
         predict_boxes = self.box2box_transform.apply_deltas(
-            proposal_deltas, proposal_boxes
+            proposal_deltas,
+            proposal_boxes,
         )  # Nx(KxB)
         return predict_boxes.split(num_prop_per_image)
 
-    def predict_probs(self, predictions, proposals):
+    def predict_probs(
+        self, predictions: Tuple[torch.Tensor, torch.Tensor], proposals: List[Instances]
+    ):
         """
         Args:
             predictions: return values of :meth:`forward()`.
@@ -725,5 +560,8 @@ class FastRCNNOutputLayers(nn.Module):
         """
         scores, _ = predictions
         num_inst_per_image = [len(p) for p in proposals]
-        probs = F.softmax(scores, dim=-1)
+        if self.use_sigmoid_ce:
+            probs = scores.sigmoid()
+        else:
+            probs = F.softmax(scores, dim=-1)
         return probs.split(num_inst_per_image, dim=0)

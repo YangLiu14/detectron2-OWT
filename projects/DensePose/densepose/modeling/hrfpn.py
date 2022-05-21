@@ -1,3 +1,4 @@
+# Copyright (c) Facebook, Inc. and its affiliates.
 """
 MIT License
 Copyright (c) 2019 Microsoft
@@ -30,7 +31,7 @@ from .hrnet import build_pose_hrnet_backbone
 
 
 class HRFPN(Backbone):
-    """ HRFPN (High Resolution Feature Pyramids)
+    """HRFPN (High Resolution Feature Pyramids)
     Transforms outputs of HRNet backbone so they are suitable for the ROI_heads
     arXiv: https://arxiv.org/abs/1904.04514
     Adapted from https://github.com/open-mmlab/mmdetection/blob/master/mmdet/models/necks/hrfpn.py
@@ -161,7 +162,7 @@ class HRFPN(Backbone):
 
 
 @BACKBONE_REGISTRY.register()
-def build_hrfpn_backbone(cfg, input_shape: ShapeSpec):
+def build_hrfpn_backbone(cfg, input_shape: ShapeSpec) -> HRFPN:
 
     in_channels = cfg.MODEL.HRNET.STAGE4.NUM_CHANNELS
     in_features = ["p%d" % (i + 1) for i in range(cfg.MODEL.HRNET.STAGE4.NUM_BRANCHES)]

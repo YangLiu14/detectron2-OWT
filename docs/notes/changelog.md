@@ -1,4 +1,4 @@
-# Backward Compatibility and Change Log
+# Change Log and Backward Compatibility
 
 ### Releases
 See release logs at
@@ -21,6 +21,8 @@ But we try to reduce users' disruption by the following ways:
   They may be promoted to stable when we're ready.
 * Projects under "detectron2/projects" or imported with "detectron2.projects" are research projects
   and are all considered experimental.
+* Classes/functions that contain the word "default" or are explicitly documented to produce
+  "default behavior" may change their behaviors when new features are added.
 
 Despite of the possible breakage, if a third-party project would like to keep up with the latest updates
 in detectron2, using it as a library will still be less disruptive than forking, because
@@ -36,7 +38,7 @@ There is no need for an open source user to worry about this.
 * v1: Rename `RPN_HEAD.NAME` to `RPN.HEAD_NAME`.
 * v2: A batch of rename of many configurations before release.
 
-### Silent Regression in Historical Versions:
+### Silent Regressions in Historical Versions:
 
 We list a few silent regressions, since they may silently produce incorrect results and will be hard to debug.
 

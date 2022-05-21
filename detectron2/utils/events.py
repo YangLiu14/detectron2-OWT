@@ -1,4 +1,4 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 import datetime
 import json
 import logging
@@ -6,9 +6,11 @@ import os
 import time
 from collections import defaultdict
 from contextlib import contextmanager
+from typing import Optional
 import torch
-from fvcore.common.file_io import PathManager
 from fvcore.common.history_buffer import HistoryBuffer
+
+from detectron2.utils.file_io import PathManager
 
 __all__ = [
     "get_event_storage",
@@ -57,7 +59,7 @@ class JSONWriter(EventWriter):
         [
           {
             "data_time": 0.008433341979980469,
-            "iteration": 20,
+            "iteration": 19,
             "loss": 1.9228371381759644,
             "loss_box_reg": 0.050025828182697296,
             "loss_classifier": 0.5316952466964722,
@@ -69,7 +71,7 @@ class JSONWriter(EventWriter):
           },
           {
             "data_time": 0.007216215133666992,
-            "iteration": 40,
+            "iteration": 39,
             "loss": 1.282649278640747,
             "loss_box_reg": 0.06222952902317047,
             "loss_classifier": 0.30682939291000366,
@@ -109,8 +111,9 @@ class JSONWriter(EventWriter):
             if iter <= self._last_write:
                 continue
             to_save[iter][k] = v
-        all_iters = sorted(to_save.keys())
-        self._last_write = max(all_iters)
+        if len(to_save):
+            all_iters = sorted(to_save.keys())
+            self._last_write = max(all_iters)
 
         for itr, scalars_per_iter in to_save.items():
             scalars_per_iter["iteration"] = itr
@@ -185,19 +188,46 @@ class CommonMetricPrinter(EventWriter):
     To print something in more customized ways, please implement a similar printer by yourself.
     """
 
-    def __init__(self, max_iter):
+    def __init__(self, max_iter: Optional[int] = None, window_size: int = 20):
         """
         Args:
-            max_iter (int): the maximum number of iterations to train.
-                Used to compute ETA.
+            max_iter: the maximum number of iterations to train.
+                Used to compute ETA. If not given, ETA will not be printed.
+            window_size (int): the losses will be median-smoothed by this window size
         """
         self.logger = logging.getLogger(__name__)
         self._max_iter = max_iter
-        self._last_write = None
+        self._window_size = window_size
+        self._last_write = None  # (step, time) of last call to write(). Used to compute ETA
+
+    def _get_eta(self, storage) -> Optional[str]:
+        if self._max_iter is None:
+            return ""
+        iteration = storage.iter
+        try:
+            eta_seconds = storage.history("time").median(1000) * (self._max_iter - iteration - 1)
+            storage.put_scalar("eta_seconds", eta_seconds, smoothing_hint=False)
+            return str(datetime.timedelta(seconds=int(eta_seconds)))
+        except KeyError:
+            # estimate eta on our own - more noisy
+            eta_string = None
+            if self._last_write is not None:
+                estimate_iter_time = (time.perf_counter() - self._last_write[1]) / (
+                    iteration - self._last_write[0]
+                )
+                eta_seconds = estimate_iter_time * (self._max_iter - iteration - 1)
+                eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
+            self._last_write = (iteration, time.perf_counter())
+            return eta_string
 
     def write(self):
         storage = get_event_storage()
         iteration = storage.iter
+        if iteration == self._max_iter:
+            # This hook only reports training progress (loss, ETA, etc) but not other data,
+            # therefore do not write anything after training succeeds, even if this method
+            # is called.
+            return
 
         try:
             data_time = storage.history("data_time").avg(20)
@@ -205,28 +235,16 @@ class CommonMetricPrinter(EventWriter):
             # they may not exist in the first few iterations (due to warmup)
             # or when SimpleTrainer is not used
             data_time = None
-
-        eta_string = None
         try:
             iter_time = storage.history("time").global_avg()
-            eta_seconds = storage.history("time").median(1000) * (self._max_iter - iteration)
-            storage.put_scalar("eta_seconds", eta_seconds, smoothing_hint=False)
-            eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
         except KeyError:
             iter_time = None
-            # estimate eta on our own - more noisy
-            if self._last_write is not None:
-                estimate_iter_time = (time.perf_counter() - self._last_write[1]) / (
-                    iteration - self._last_write[0]
-                )
-                eta_seconds = estimate_iter_time * (self._max_iter - iteration)
-                eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
-            self._last_write = (iteration, time.perf_counter())
-
         try:
             lr = "{:.5g}".format(storage.history("lr").latest())
         except KeyError:
             lr = "N/A"
+
+        eta_string = self._get_eta(storage)
 
         if torch.cuda.is_available():
             max_mem_mb = torch.cuda.max_memory_allocated() / 1024.0 / 1024.0
@@ -240,7 +258,7 @@ class CommonMetricPrinter(EventWriter):
                 iter=iteration,
                 losses="  ".join(
                     [
-                        "{}: {:.4g}".format(k, v.median(20))
+                        "{}: {:.4g}".format(k, v.median(self._window_size))
                         for k, v in storage.histories().items()
                         if "loss" in k
                     ]
@@ -408,16 +426,25 @@ class EventStorage:
 
     def step(self):
         """
-        User should call this function at the beginning of each iteration, to
-        notify the storage of the start of a new iteration.
-        The storage will then be able to associate the new data with the
-        correct iteration number.
+        User should either: (1) Call this function to increment storage.iter when needed. Or
+        (2) Set `storage.iter` to the correct iteration number before each iteration.
+
+        The storage will then be able to associate the new data with an iteration number.
         """
         self._iter += 1
 
     @property
     def iter(self):
+        """
+        Returns:
+            int: The current iteration number. When used together with a trainer,
+                this is ensured to be the same as trainer.iter.
+        """
         return self._iter
+
+    @iter.setter
+    def iter(self, val):
+        self._iter = int(val)
 
     @property
     def iteration(self):

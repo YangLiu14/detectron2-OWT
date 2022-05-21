@@ -1,7 +1,7 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from detectron2.structures import Instances
 
@@ -35,9 +35,10 @@ class PredictionToGroundTruthSampler:
         self._samplers = {}
         self.register_sampler("pred_boxes", "gt_boxes", None)
         self.register_sampler("pred_classes", "gt_classes", None)
+        # delete scores
         self.register_sampler("scores")
 
-    def __call__(self, model_output: ModelOutput) -> SampledData:
+    def __call__(self, model_output: List[ModelOutput]) -> List[SampledData]:
         """
         Transform model output into ground truth data through sampling
 
@@ -77,4 +78,21 @@ class PredictionToGroundTruthSampler:
           gt_attr (Optional[str]): field to store the sampled value to, if not None
           func (Optional[Callable: Any -> Any]): sampler function
         """
-        self._samplers[prediction_attr] = _Sampler(src=prediction_attr, dst=gt_attr, func=func)
+        self._samplers[(prediction_attr, gt_attr)] = _Sampler(
+            src=prediction_attr, dst=gt_attr, func=func
+        )
+
+    def remove_sampler(
+        self,
+        prediction_attr: str,
+        gt_attr: Optional[str] = None,
+    ):
+        """
+        Remove sampler for a field
+
+        Args:
+          prediction_attr (str): field to replace with a sampled value
+          gt_attr (Optional[str]): field to store the sampled value to, if not None
+        """
+        assert (prediction_attr, gt_attr) in self._samplers
+        del self._samplers[(prediction_attr, gt_attr)]

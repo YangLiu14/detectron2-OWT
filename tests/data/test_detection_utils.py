@@ -1,15 +1,15 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
+# Copyright (c) Facebook, Inc. and its affiliates.
 
 import copy
 import numpy as np
 import os
 import unittest
 import pycocotools.mask as mask_util
-from fvcore.common.file_io import PathManager
 
 from detectron2.data import MetadataCatalog, detection_utils
 from detectron2.data import transforms as T
 from detectron2.structures import BitMasks, BoxMode
+from detectron2.utils.file_io import PathManager
 
 
 class TestTransformAnnotations(unittest.TestCase):
@@ -28,6 +28,9 @@ class TestTransformAnnotations(unittest.TestCase):
         self.assertTrue(np.allclose(output["segmentation"][0], [390, 10, 300, 100, 300, 10]))
 
         detection_utils.annotations_to_instances([output, output], (400, 400))
+
+    def test_transform_empty_annotation(self):
+        detection_utils.annotations_to_instances([], (400, 400))
 
     def test_flip_keypoints(self):
         transforms = T.TransformList([T.HFlipTransform(400)])
@@ -150,6 +153,23 @@ class TestTransformAnnotations(unittest.TestCase):
         self.assertEqual(sem_seg.dtype, np.uint8)
         self.assertEqual(sem_seg.max(), 32)
         self.assertEqual(sem_seg.min(), 1)
+
+    def test_read_exif_orientation(self):
+        # https://github.com/recurser/exif-orientation-examples/raw/master/Landscape_5.jpg
+        URL = "detectron2://assets/Landscape_5.jpg"
+        img = detection_utils.read_image(URL, "RGB")
+        self.assertEqual(img.ndim, 3)
+        self.assertEqual(img.dtype, np.uint8)
+        self.assertEqual(img.shape, (1200, 1800, 3))  # check that shape is not transposed
+
+    def test_opencv_exif_orientation(self):
+        import cv2
+
+        URL = "detectron2://assets/Landscape_5.jpg"
+        with PathManager.open(URL, "rb") as f:
+            img = cv2.imdecode(np.frombuffer(f.read(), dtype="uint8"), cv2.IMREAD_COLOR)
+        self.assertEqual(img.dtype, np.uint8)
+        self.assertEqual(img.shape, (1200, 1800, 3))
 
 
 if __name__ == "__main__":

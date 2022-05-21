@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 
 import inspect
 import numpy as np
@@ -8,7 +8,8 @@ from typing import Any, List, Optional, Tuple, Union
 from fvcore.transforms.transform import Transform, TransformList
 
 """
-See "Data Augmentation" tutorial for an overview of the system.
+See "Data Augmentation" tutorial for an overview of the system:
+https://detectron2.readthedocs.io/tutorials/augmentation.html
 """
 
 
@@ -164,7 +165,7 @@ class Augmentation:
         tfm = self.get_transform(*args)
         assert isinstance(tfm, (Transform, TransformList)), (
             f"{type(self)}.get_transform must return an instance of Transform! "
-            "Got {type(tfm)} instead."
+            f"Got {type(tfm)} instead."
         )
         aug_input.transform(tfm)
         return tfm

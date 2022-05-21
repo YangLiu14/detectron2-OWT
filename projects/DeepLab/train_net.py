@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 
 """
 DeepLab Training Script.
@@ -8,10 +8,8 @@ This script is a simplified version of the training script in detectron2/tools.
 """
 
 import os
-import torch
 
 import detectron2.data.transforms as T
-import detectron2.utils.comm as comm
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.data import DatasetMapper, MetadataCatalog, build_detection_train_loader
@@ -63,14 +61,9 @@ class Trainer(DefaultTrainer):
             return SemSegEvaluator(
                 dataset_name,
                 distributed=True,
-                num_classes=cfg.MODEL.SEM_SEG_HEAD.NUM_CLASSES,
-                ignore_label=cfg.MODEL.SEM_SEG_HEAD.IGNORE_VALUE,
                 output_dir=output_folder,
             )
         if evaluator_type == "cityscapes_sem_seg":
-            assert (
-                torch.cuda.device_count() >= comm.get_rank()
-            ), "CityscapesEvaluator currently do not work with multiple machines."
             return CityscapesSemSegEvaluator(dataset_name)
         if len(evaluator_list) == 0:
             raise NotImplementedError(

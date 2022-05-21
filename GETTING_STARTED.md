@@ -7,15 +7,13 @@ see our [Colab Notebook](https://colab.research.google.com/drive/16jcaJoc6bCFAQ9
 which covers how to run inference with an
 existing model, and how to train a builtin model on a custom dataset.
 
-For more advanced tutorials, refer to our [documentation](https://detectron2.readthedocs.io/tutorials/extend.html).
-
 
 ### Inference Demo with Pre-trained Models
 
 1. Pick a model and its config file from
   [model zoo](MODEL_ZOO.md),
   for example, `mask_rcnn_R_50_FPN_3x.yaml`.
-2. We provide `demo.py` that is able to run builtin standard models. Run it with:
+2. We provide `demo.py` that is able to demo builtin configs. Run it with:
 ```
 cd demo/
 python demo.py --config-file ../configs/COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml \
@@ -62,8 +60,6 @@ To train on 1 GPU, you may need to [change some parameters](https://arxiv.org/ab
   --num-gpus 1 SOLVER.IMS_PER_BATCH 2 SOLVER.BASE_LR 0.0025
 ```
 
-For most models, CPU training is not supported.
-
 To evaluate a model's performance, use
 ```
 ./train_net.py \
@@ -79,5 +75,5 @@ to learn how to use detectron2 APIs to:
 1. run inference with an existing model
 2. train a builtin model on a custom dataset
 
-See [detectron2/projects](https://github.com/facebookresearch/detectron2/tree/master/projects)
+See [detectron2/projects](https://github.com/facebookresearch/detectron2/tree/main/projects)
 for more ways to build your project on detectron2.

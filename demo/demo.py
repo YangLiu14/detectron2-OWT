@@ -1,9 +1,12 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 import argparse
 import glob
 import multiprocessing as mp
+import numpy as np
 import os
+import tempfile
 import time
+import warnings
 import cv2
 import tqdm
 
@@ -20,6 +23,9 @@ WINDOW_NAME = "COCO detections"
 def setup_cfg(args):
     # load config from file and command-line arguments
     cfg = get_cfg()
+    # To use demo for Panoptic-DeepLab, please uncomment the following two lines.
+    # from detectron2.projects.panoptic_deeplab import add_panoptic_deeplab_config  # noqa
+    # add_panoptic_deeplab_config(cfg)
     cfg.merge_from_file(args.config_file)
     cfg.merge_from_list(args.opts)
     # Set score_threshold for builtin models
@@ -31,7 +37,7 @@ def setup_cfg(args):
 
 
 def get_parser():
-    parser = argparse.ArgumentParser(description="Detectron2 demo for builtin models")
+    parser = argparse.ArgumentParser(description="Detectron2 demo for builtin configs")
     parser.add_argument(
         "--config-file",
         default="configs/quick_schedules/mask_rcnn_R_50_FPN_inference_acc_test.yaml",
@@ -65,6 +71,23 @@ def get_parser():
         nargs=argparse.REMAINDER,
     )
     return parser
+
+
+def test_opencv_video_format(codec, file_ext):
+    with tempfile.TemporaryDirectory(prefix="video_format_test") as dir:
+        filename = os.path.join(dir, "test_file" + file_ext)
+        writer = cv2.VideoWriter(
+            filename=filename,
+            fourcc=cv2.VideoWriter_fourcc(*codec),
+            fps=float(30),
+            frameSize=(10, 10),
+            isColor=True,
+        )
+        [writer.write(np.zeros((10, 10, 3), np.uint8)) for _ in range(30)]
+        writer.release()
+        if os.path.isfile(filename):
+            return True
+        return False
 
 
 if __name__ == "__main__":
@@ -128,11 +151,15 @@ if __name__ == "__main__":
         frames_per_second = video.get(cv2.CAP_PROP_FPS)
         num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
         basename = os.path.basename(args.video_input)
-
+        codec, file_ext = (
+            ("x264", ".mkv") if test_opencv_video_format("x264", ".mkv") else ("mp4v", ".mp4")
+        )
+        if codec == ".mp4v":
+            warnings.warn("x264 codec not available, switching to mp4v")
         if args.output:
             if os.path.isdir(args.output):
                 output_fname = os.path.join(args.output, basename)
-                output_fname = os.path.splitext(output_fname)[0] + ".mkv"
+                output_fname = os.path.splitext(output_fname)[0] + file_ext
             else:
                 output_fname = args.output
             assert not os.path.isfile(output_fname), output_fname
@@ -140,7 +167,7 @@ if __name__ == "__main__":
                 filename=output_fname,
                 # some installation of opencv may not support x264 (due to its license),
                 # you can try other format (e.g. MPEG)
-                fourcc=cv2.VideoWriter_fourcc(*"x264"),
+                fourcc=cv2.VideoWriter_fourcc(*codec),
                 fps=float(frames_per_second),
                 frameSize=(width, height),
                 isColor=True,

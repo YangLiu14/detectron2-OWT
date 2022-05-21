@@ -1,4 +1,4 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 import copy
 import itertools
 import json
@@ -7,11 +7,12 @@ import os
 import pickle
 from collections import OrderedDict
 import torch
-from fvcore.common.file_io import PathManager
 
 import detectron2.utils.comm as comm
+from detectron2.config import CfgNode
 from detectron2.data import MetadataCatalog
 from detectron2.structures import Boxes, BoxMode, pairwise_iou
+from detectron2.utils.file_io import PathManager
 from detectron2.utils.logger import create_small_table
 
 from .coco_evaluation import instances_to_coco_json
@@ -24,25 +25,47 @@ class LVISEvaluator(DatasetEvaluator):
     LVIS's metrics and evaluation API.
     """
 
-    def __init__(self, dataset_name, cfg, distributed, output_dir=None):
+    def __init__(
+        self,
+        dataset_name,
+        tasks=None,
+        distributed=True,
+        output_dir=None,
+        *,
+        max_dets_per_image=None,
+    ):
         """
         Args:
             dataset_name (str): name of the dataset to be evaluated.
                 It must have the following corresponding metadata:
                 "json_file": the path to the LVIS format annotation
-            cfg (CfgNode): config instance
+            tasks (tuple[str]): tasks that can be evaluated under the given
+                configuration. A task is one of "bbox", "segm".
+                By default, will infer this automatically from predictions.
             distributed (True): if True, will collect results from all ranks for evaluation.
                 Otherwise, will evaluate the results in the current process.
             output_dir (str): optional, an output directory to dump results.
+            max_dets_per_image (None or int): limit on maximum detections per image in evaluating AP
+                This limit, by default of the LVIS dataset, is 300.
         """
         from lvis import LVIS
 
-        self._tasks = self._tasks_from_config(cfg)
+        self._logger = logging.getLogger(__name__)
+
+        if tasks is not None and isinstance(tasks, CfgNode):
+            self._logger.warn(
+                "COCO Evaluator instantiated using config, this is deprecated behavior."
+                " Please pass in explicit arguments instead."
+            )
+            self._tasks = None  # Infering it from predictions should be better
+        else:
+            self._tasks = tasks
+
         self._distributed = distributed
         self._output_dir = output_dir
+        self._max_dets_per_image = max_dets_per_image
 
         self._cpu_device = torch.device("cpu")
-        self._logger = logging.getLogger(__name__)
 
         self._metadata = MetadataCatalog.get(dataset_name)
         json_file = PathManager.get_local_path(self._metadata.json_file)
@@ -53,16 +76,6 @@ class LVISEvaluator(DatasetEvaluator):
 
     def reset(self):
         self._predictions = []
-
-    def _tasks_from_config(self, cfg):
-        """
-        Returns:
-            tuple[str]: tasks that can be evaluated under the given configuration.
-        """
-        tasks = ("bbox",)
-        if cfg.MODEL.MASK_ON:
-            tasks = tasks + ("segm",)
-        return tasks
 
     def process(self, inputs, outputs):
         """
@@ -108,20 +121,26 @@ class LVISEvaluator(DatasetEvaluator):
         if "proposals" in predictions[0]:
             self._eval_box_proposals(predictions)
         if "instances" in predictions[0]:
-            self._eval_predictions(set(self._tasks), predictions)
+            self._eval_predictions(predictions)
         # Copy so the caller can do whatever with results
         return copy.deepcopy(self._results)
 
-    def _eval_predictions(self, tasks, predictions):
+    def _tasks_from_predictions(self, predictions):
+        for pred in predictions:
+            if "segmentation" in pred:
+                return ("bbox", "segm")
+        return ("bbox",)
+
+    def _eval_predictions(self, predictions):
         """
-        Evaluate predictions on the given tasks.
-        Fill self._results with the metrics of the tasks.
+        Evaluate predictions. Fill self._results with the metrics of the tasks.
 
         Args:
             predictions (list[dict]): list of outputs from the model
         """
         self._logger.info("Preparing results in the LVIS format ...")
         lvis_results = list(itertools.chain(*[x["instances"] for x in predictions]))
+        tasks = self._tasks or self._tasks_from_predictions(lvis_results)
 
         # LVIS evaluator can be used to evaluate results for COCO dataset categories.
         # In this case `_metadata` variable will have a field with COCO-specific category mapping.
@@ -150,7 +169,11 @@ class LVISEvaluator(DatasetEvaluator):
         self._logger.info("Evaluating predictions ...")
         for task in sorted(tasks):
             res = _evaluate_predictions_on_lvis(
-                self._lvis_api, lvis_results, task, class_names=self._metadata.get("thing_classes")
+                self._lvis_api,
+                lvis_results,
+                task,
+                max_dets_per_image=self._max_dets_per_image,
+                class_names=self._metadata.get("thing_classes"),
             )
             self._results[task] = res
 
@@ -305,11 +328,14 @@ def _evaluate_box_proposals(dataset_predictions, lvis_api, thresholds=None, area
     }
 
 
-def _evaluate_predictions_on_lvis(lvis_gt, lvis_results, iou_type, class_names=None):
+def _evaluate_predictions_on_lvis(
+    lvis_gt, lvis_results, iou_type, max_dets_per_image=None, class_names=None
+):
     """
     Args:
         iou_type (str):
-        kpt_oks_sigmas (list[float]):
+        max_dets_per_image (None or int): limit on maximum detections per image in evaluating AP
+            This limit, by default of the LVIS dataset, is 300.
         class_names (None or list[str]): if provided, will use it to predict
             per-category AP.
 
@@ -336,9 +362,13 @@ def _evaluate_predictions_on_lvis(lvis_gt, lvis_results, iou_type, class_names=N
         for c in lvis_results:
             c.pop("bbox", None)
 
+    if max_dets_per_image is None:
+        max_dets_per_image = 300  # Default for LVIS dataset
+
     from lvis import LVISEval, LVISResults
 
-    lvis_results = LVISResults(lvis_gt, lvis_results)
+    logger.info(f"Evaluating with max detections per image = {max_dets_per_image}")
+    lvis_results = LVISResults(lvis_gt, lvis_results, max_dets=max_dets_per_image)
     lvis_eval = LVISEval(lvis_gt, lvis_results, iou_type)
     lvis_eval.run()
     lvis_eval.print_results()

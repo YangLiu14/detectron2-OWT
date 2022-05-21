@@ -1,13 +1,14 @@
 #!/bin/bash -e
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 
-# Run this script at project root by "./dev/linter.sh" before you commit
+# cd to detectron2 project root
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 {
-  black --version | grep -E "(19.3b0.*6733274)|(19.3b0\\+8)" > /dev/null
+  black --version | grep -E "21\." > /dev/null
 } || {
-	echo "Linter requires 'black @ git+https://github.com/psf/black@673327449f86fce558adde153bb6cbe54bfebad2' !"
-	exit 1
+  echo "Linter requires 'black==21.*' !"
+  exit 1
 }
 
 ISORT_VERSION=$(isort --version-number)

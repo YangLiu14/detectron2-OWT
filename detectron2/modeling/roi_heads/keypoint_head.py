@@ -1,4 +1,4 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 from typing import List
 import torch
 from torch import nn
@@ -96,7 +96,7 @@ def keypoint_rcnn_loss(pred_keypoint_logits, instances, normalizer):
     return keypoint_loss
 
 
-def keypoint_rcnn_inference(pred_keypoint_logits, pred_instances):
+def keypoint_rcnn_inference(pred_keypoint_logits: torch.Tensor, pred_instances: List[Instances]):
     """
     Post process each predicted keypoint heatmap in `pred_keypoint_logits` into (x, y, score)
         and add it to the `pred_instances` as a `pred_keypoints` field.
@@ -179,7 +179,7 @@ class BaseKeypointRCNNHead(nn.Module):
     def forward(self, x, instances: List[Instances]):
         """
         Args:
-            x: input region feature(s) provided by :class:`ROIHeads`.
+            x: input 4D region feature(s) provided by :class:`ROIHeads`.
             instances (list[Instances]): contains the boxes & labels corresponding
                 to the input features.
                 Exact format is up to its caller to decide.
@@ -211,8 +211,11 @@ class BaseKeypointRCNNHead(nn.Module):
         raise NotImplementedError
 
 
+# To get torchscript support, we make the head a subclass of `nn.Sequential`.
+# Therefore, to add new layers in this head class, please make sure they are
+# added in the order they will be used in forward().
 @ROI_KEYPOINT_HEAD_REGISTRY.register()
-class KRCNNConvDeconvUpsampleHead(BaseKeypointRCNNHead):
+class KRCNNConvDeconvUpsampleHead(BaseKeypointRCNNHead, nn.Sequential):
     """
     A standard keypoint head containing a series of 3x3 convs, followed by
     a transpose convolution and bilinear interpolation for upsampling.
@@ -231,15 +234,14 @@ class KRCNNConvDeconvUpsampleHead(BaseKeypointRCNNHead):
         """
         super().__init__(num_keypoints=num_keypoints, **kwargs)
 
-        # default up_scale to 2 (this can be made an option)
-        up_scale = 2
+        # default up_scale to 2.0 (this can be made an option)
+        up_scale = 2.0
         in_channels = input_shape.channels
 
-        self.blocks = []
         for idx, layer_channels in enumerate(conv_dims, 1):
             module = Conv2d(in_channels, layer_channels, 3, stride=1, padding=1)
             self.add_module("conv_fcn{}".format(idx), module)
-            self.blocks.append(module)
+            self.add_module("conv_fcn_relu{}".format(idx), nn.ReLU())
             in_channels = layer_channels
 
         deconv_kernel = 4
@@ -264,8 +266,7 @@ class KRCNNConvDeconvUpsampleHead(BaseKeypointRCNNHead):
         return ret
 
     def layers(self, x):
-        for layer in self.blocks:
-            x = F.relu(layer(x))
-        x = self.score_lowres(x)
+        for layer in self:
+            x = layer(x)
         x = interpolate(x, scale_factor=self.up_scale, mode="bilinear", align_corners=False)
         return x

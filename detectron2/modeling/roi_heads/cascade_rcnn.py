@@ -1,4 +1,4 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 from typing import List
 import torch
 from torch import nn
@@ -13,7 +13,7 @@ from ..box_regression import Box2BoxTransform
 from ..matcher import Matcher
 from ..poolers import ROIPooler
 from .box_head import build_box_head
-from .fast_rcnn import FastRCNNOutputLayers, fast_rcnn_inference, fast_rcnn_inference_with_objectness
+from .fast_rcnn import FastRCNNOutputLayers, fast_rcnn_inference
 from .roi_heads import ROI_HEADS_REGISTRY, StandardROIHeads
 
 
@@ -31,7 +31,7 @@ class _ScaleGradient(Function):
 @ROI_HEADS_REGISTRY.register()
 class CascadeROIHeads(StandardROIHeads):
     """
-    Implement :paper:`Cascade R-CNN`.
+    The ROI heads that implement :paper:`Cascade R-CNN`.
     """
 
     @configurable
@@ -160,15 +160,10 @@ class CascadeROIHeads(StandardROIHeads):
                 Each has fields "proposal_boxes", and "objectness_logits",
                 "gt_classes", "gt_boxes".
         """
-        # ==== Yang's addition ====
-        softmax = torch.nn.Softmax()
-        objectness_scores = [softmax(proposals[0].objectness_logits)]
-        # ==== End of Yang's addition ====
         features = [features[f] for f in self.box_in_features]
         head_outputs = []  # (predictor, predictions, proposals)
         prev_pred_boxes = None
         image_sizes = [x.image_size for x in proposals]
-        box_features_list = list()  # Yang's modification
         for k in range(self.num_cascade_stages):
             if k > 0:
                 # The output boxes of the previous stage are used to create the input
@@ -176,9 +171,7 @@ class CascadeROIHeads(StandardROIHeads):
                 proposals = self._create_proposals_from_boxes(prev_pred_boxes, image_sizes)
                 if self.training:
                     proposals = self._match_and_label_boxes(proposals, k, targets)
-            # predictions = self._run_stage(features, proposals, k)
-            predictions, box_features = self._run_stage(features, proposals, k)  # Yang's modification
-            box_features_list.append(box_features)  # Yang's modification
+            predictions = self._run_stage(features, proposals, k)
             prev_pred_boxes = self.box_predictor[k].predict_boxes(predictions, proposals)
             head_outputs.append((self.box_predictor[k], predictions, proposals))
 
@@ -202,22 +195,14 @@ class CascadeROIHeads(StandardROIHeads):
             # Use the boxes of the last head
             predictor, predictions, proposals = head_outputs[-1]
             boxes = predictor.predict_boxes(predictions, proposals)
-            # ==== Yang's addition ====
-            # Combine the box_features(1000, 1024) and output
-            box_features_concat = torch.cat(box_features_list)
-            out_features = box_features_list[-1]  # Preliminary: only use the features in the last stage
-            # ==== End of Yang's addition ====
-            pred_instances, _ = fast_rcnn_inference_with_objectness(
+            pred_instances, _ = fast_rcnn_inference(
                 boxes,
                 scores,
-                objectness_scores,
-                out_features,
                 image_sizes,
                 predictor.test_score_thresh,
                 predictor.test_nms_thresh,
                 predictor.test_topk_per_image,
             )
-
             return pred_instances
 
     @torch.no_grad()
@@ -230,7 +215,7 @@ class CascadeROIHeads(StandardROIHeads):
             proposals (list[Instances]): One Instances for each image, with
                 the field "proposal_boxes".
             stage (int): the current stage
-            targets (list[Instances]): the ground   truth instances
+            targets (list[Instances]): the ground truth instances
 
         Returns:
             list[Instances]: the same proposals, but with fields "gt_classes" and "gt_boxes"
@@ -285,10 +270,10 @@ class CascadeROIHeads(StandardROIHeads):
         # but scale up the parameter gradients of the heads.
         # This is equivalent to adding the losses among heads,
         # but scale down the gradients on features.
-        box_features = _ScaleGradient.apply(box_features, 1.0 / self.num_cascade_stages)
+        if self.training:
+            box_features = _ScaleGradient.apply(box_features, 1.0 / self.num_cascade_stages)
         box_features = self.box_head[stage](box_features)
-        # return self.box_predictor[stage](box_features)
-        return self.box_predictor[stage](box_features), box_features  # Yang's modification
+        return self.box_predictor[stage](box_features)
 
     def _create_proposals_from_boxes(self, boxes, image_sizes):
         """

@@ -1,6 +1,7 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 import logging
-from fvcore.common.file_io import PathHandler, PathManager
+
+from detectron2.utils.file_io import PathHandler, PathManager
 
 
 class ModelCatalog(object):
@@ -101,34 +102,14 @@ class ModelCatalogHandler(PathHandler):
     def _get_supported_prefixes(self):
         return [self.PREFIX]
 
-    def _get_local_path(self, path):
+    def _get_local_path(self, path, **kwargs):
         logger = logging.getLogger(__name__)
         catalog_path = ModelCatalog.get(path[len(self.PREFIX) :])
         logger.info("Catalog entry {} points to {}".format(path, catalog_path))
-        return PathManager.get_local_path(catalog_path)
-
-    def _open(self, path, mode="r", **kwargs):
-        return PathManager.open(self._get_local_path(path), mode, **kwargs)
-
-
-class Detectron2Handler(PathHandler):
-    """
-    Resolve anything that's in Detectron2 model zoo.
-    """
-
-    PREFIX = "detectron2://"
-    S3_DETECTRON2_PREFIX = "https://dl.fbaipublicfiles.com/detectron2/"
-
-    def _get_supported_prefixes(self):
-        return [self.PREFIX]
-
-    def _get_local_path(self, path):
-        name = path[len(self.PREFIX) :]
-        return PathManager.get_local_path(self.S3_DETECTRON2_PREFIX + name)
+        return PathManager.get_local_path(catalog_path, **kwargs)
 
     def _open(self, path, mode="r", **kwargs):
         return PathManager.open(self._get_local_path(path), mode, **kwargs)
 
 
 PathManager.register_handler(ModelCatalogHandler())
-PathManager.register_handler(Detectron2Handler())

@@ -8,17 +8,17 @@ Detectron2's data augmentation system aims at addressing the following goals:
    (e.g., images together with their bounding boxes and masks)
 2. Allow applying a sequence of statically-declared augmentation
 3. Allow adding custom new data types to augment (rotated bounding boxes, video clips, etc.)
-4. Process and manipulate the operations that are applied by augmentations
+4. Process and manipulate the __operations__ that are applied by augmentations
 
 The first two features cover most of the common use cases, and is also
 available in other libraries such as [albumentations](https://medium.com/pytorch/multi-target-in-albumentations-16a777e9006e).
 Supporting other features adds some overhead to detectron2's augmentation API,
 which we'll explain in this tutorial.
 
-If you use the default data loader in detectron2, it already supports taking a user-provided list of custom augmentations,
-as explained in the [Dataloader tutorial](data_loading).
 This tutorial focuses on how to use augmentations when writing new data loaders,
 and how to write new augmentations.
+If you use the default data loader in detectron2, it already supports taking a user-provided list of custom augmentations,
+as explained in the [Dataloader tutorial](data_loading).
 
 ## Basic Usage
 
@@ -98,19 +98,20 @@ New transform operation can also be added by subclassing
 
 We give a few examples of advanced usages that
 are enabled by our system.
-These options are interesting to explore, although changing them is often not needed
-for common use cases.
+These options can be interesting to new research,
+although changing them is often not needed
+for standard use cases.
 
 ### Custom transform strategy
 
-Instead of only returning the augmented data, detectron'2 `Augmentation` returns the __operations__ as `T.Transform`.
+Instead of only returning the augmented data, detectron2's `Augmentation` returns the __operations__ as `T.Transform`.
 This allows users to apply custom transform strategy on their data.
-We use keypoints as an example.
+We use keypoints data as an example.
 
 Keypoints are (x, y) coordinates, but they are not so trivial to augment due to the semantic meaning they carry.
 Such meaning is only known to the users, therefore users may want to augment them manually
 by looking at the returned `transform`.
-For example, when an image is horizontally flipped, we'd like to to swap the keypoint annotations for "left eye" and "right eye".
+For example, when an image is horizontally flipped, we'd like to swap the keypoint annotations for "left eye" and "right eye".
 This can be done like this (included by default in detectron2's default data loader):
 ```python
 # augs, input are defined as in previous examples
@@ -180,6 +181,6 @@ which are sufficient for common augmentation strategies to decide how to augment
 If not, a custom implementation is needed.
 
 By re-implement the "transform()" method in AugInput, it is also possible to
-augment different fields in ways that are not independent to each other.
-Such use case is uncommon, but allowed by our system (e.g. post-process bounding box based on augmented masks).
+augment different fields in ways that are dependent on each other.
+Such use case is uncommon (e.g. post-process bounding box based on augmented masks), but allowed by the system.
 

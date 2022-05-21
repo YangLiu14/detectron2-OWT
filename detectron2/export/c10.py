@@ -1,4 +1,4 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
+# Copyright (c) Facebook, Inc. and its affiliates.
 
 import math
 import torch
@@ -15,7 +15,7 @@ from .shared import alias, to_device
 
 
 """
-This file contains caffe2-compatible implementation of several detectrno2 components.
+This file contains caffe2-compatible implementation of several detectron2 components.
 """
 
 
@@ -56,8 +56,8 @@ class InstancesList(object):
         self.image_size = self.im_info
 
     def get_fields(self):
-        """ like `get_fields` in the Instances object,
-        but return each field in tensor representations """
+        """like `get_fields` in the Instances object,
+        but return each field in tensor representations"""
         ret = {}
         for k, v in self.batch_extra_fields.items():
             # if isinstance(v, torch.Tensor):
@@ -145,6 +145,10 @@ class InstancesList(object):
 
 
 class Caffe2Compatible(object):
+    """
+    A model can inherit this class to indicate that it can be traced and deployed with caffe2.
+    """
+
     def _get_tensor_mode(self):
         return self._tensor_mode
 
@@ -158,19 +162,16 @@ class Caffe2Compatible(object):
 
 
 class Caffe2RPN(Caffe2Compatible, rpn.RPN):
-    def forward(self, images, features, gt_instances=None):
-        assert not self.training
-
-        features = [features[f] for f in self.in_features]
-        objectness_logits_pred, anchor_deltas_pred = self.rpn_head(features)
-
+    def _generate_proposals(
+        self, images, objectness_logits_pred, anchor_deltas_pred, gt_instances=None
+    ):
         assert isinstance(images, ImageList)
         if self.tensor_mode:
             im_info = images.image_sizes
         else:
-            im_info = torch.Tensor(
-                [[im_sz[0], im_sz[1], torch.Tensor([1.0])] for im_sz in images.image_sizes]
-            ).to(images.tensor.device)
+            im_info = torch.tensor([[im_sz[0], im_sz[1], 1.0] for im_sz in images.image_sizes]).to(
+                images.tensor.device
+            )
         assert isinstance(im_info, torch.Tensor)
 
         rpn_rois_list = []
@@ -244,6 +245,17 @@ class Caffe2RPN(Caffe2Compatible, rpn.RPN):
         proposals = self.c2_postprocess(im_info, rpn_rois, rpn_roi_probs, self.tensor_mode)
         return proposals, {}
 
+    def forward(self, images, features, gt_instances=None):
+        assert not self.training
+        features = [features[f] for f in self.in_features]
+        objectness_logits_pred, anchor_deltas_pred = self.rpn_head(features)
+        return self._generate_proposals(
+            images,
+            objectness_logits_pred,
+            anchor_deltas_pred,
+            gt_instances,
+        )
+
     @staticmethod
     def c2_postprocess(im_info, rpn_rois, rpn_roi_probs, tensor_mode):
         proposals = InstancesList(
@@ -287,8 +299,12 @@ class Caffe2ROIPooler(Caffe2Compatible, poolers.ROIPooler):
                 c2_roi_align = torch.ops._caffe2.RoIAlign
                 aligned = self.level_poolers[0].aligned
 
+            x0 = x[0]
+            if x0.is_quantized:
+                x0 = x0.dequantize()
+
             out = c2_roi_align(
-                x[0],
+                x0,
                 pooler_fmt_boxes,
                 order="NCHW",
                 spatial_scale=float(self.level_poolers[0].spatial_scale),
@@ -325,6 +341,9 @@ class Caffe2ROIPooler(Caffe2Compatible, poolers.ROIPooler):
                 c2_roi_align = torch.ops._caffe2.RoIAlign
                 aligned = bool(pooler.aligned)
 
+            if x_level.is_quantized:
+                x_level = x_level.dequantize()
+
             roi_feat_fpn = c2_roi_align(
                 x_level,
                 roi_fpn,
@@ -338,6 +357,10 @@ class Caffe2ROIPooler(Caffe2Compatible, poolers.ROIPooler):
             roi_feat_fpn_list.append(roi_feat_fpn)
 
         roi_feat_shuffled = cat(roi_feat_fpn_list, dim=0)
+        assert roi_feat_shuffled.numel() > 0 and rois_idx_restore_int32.numel() > 0, (
+            "Caffe2 export requires tracing with a model checkpoint + input that can produce valid"
+            " detections. But no detections were obtained with the given checkpoint and input!"
+        )
         roi_feat = torch.ops._caffe2.BatchPermutation(roi_feat_shuffled, rois_idx_restore_int32)
         return roi_feat
 
@@ -347,7 +370,8 @@ class Caffe2FastRCNNOutputsInference:
         self.tensor_mode = tensor_mode  # whether the output is caffe2 tensor mode
 
     def __call__(self, box_predictor, predictions, proposals):
-        """ equivalent to FastRCNNOutputLayers.inference """
+        """equivalent to FastRCNNOutputLayers.inference"""
+        num_classes = box_predictor.num_classes
         score_thresh = box_predictor.test_score_thresh
         nms_thresh = box_predictor.test_nms_thresh
         topk_per_image = box_predictor.test_topk_per_image
@@ -365,7 +389,14 @@ class Caffe2FastRCNNOutputsInference:
             box2box_transform_weights = box_predictor.box2box_transform.weights
 
         class_logits, box_regression = predictions
-        class_prob = F.softmax(class_logits, -1)
+        if num_classes + 1 == class_logits.shape[1]:
+            class_prob = F.softmax(class_logits, -1)
+        else:
+            assert num_classes == class_logits.shape[1]
+            class_prob = F.sigmoid(class_logits)
+            # BoxWithNMSLimit will infer num_classes from the shape of the class_prob
+            # So append a zero column as placeholder for the background class
+            class_prob = torch.cat((class_prob, torch.zeros(class_prob.shape[0], 1)), dim=1)
 
         assert box_regression.shape[1] % box_dim == 0
         cls_agnostic_bbox_reg = box_regression.shape[1] // box_dim == 1
@@ -378,7 +409,7 @@ class Caffe2FastRCNNOutputsInference:
             im_info = proposals[0].image_size
             rois = rois.tensor
         else:
-            im_info = torch.Tensor(
+            im_info = torch.tensor(
                 [[sz[0], sz[1], 1.0] for sz in [x.image_size for x in proposals]]
             )
             batch_ids = cat(
@@ -470,7 +501,7 @@ class Caffe2FastRCNNOutputsInference:
 
 class Caffe2MaskRCNNInference:
     def __call__(self, pred_mask_logits, pred_instances):
-        """ equivalent to mask_head.mask_rcnn_inference """
+        """equivalent to mask_head.mask_rcnn_inference"""
         if all(isinstance(x, InstancesList) for x in pred_instances):
             assert len(pred_instances) == 1
             mask_probs_pred = pred_mask_logits.sigmoid()

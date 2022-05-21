@@ -1,8 +1,8 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 import math
 import numpy as np
 from enum import IntEnum, unique
-from typing import Any, List, Tuple, Union
+from typing import List, Tuple, Union
 import torch
 from torch import device
 
@@ -69,10 +69,7 @@ class BoxMode(IntEnum):
             else:
                 arr = box.clone()
 
-        assert to_mode.value not in [
-            BoxMode.XYXY_REL,
-            BoxMode.XYWH_REL,
-        ] and from_mode.value not in [
+        assert to_mode not in [BoxMode.XYXY_REL, BoxMode.XYWH_REL] and from_mode not in [
             BoxMode.XYXY_REL,
             BoxMode.XYWH_REL,
         ], "Relative mode not yet supported!"
@@ -147,12 +144,14 @@ class Boxes:
         Args:
             tensor (Tensor[float]): a Nx4 matrix.  Each row is (x1, y1, x2, y2).
         """
-        device = tensor.device if isinstance(tensor, torch.Tensor) else torch.device("cpu")
-        tensor = torch.as_tensor(tensor, dtype=torch.float32, device=device)
+        if not isinstance(tensor, torch.Tensor):
+            tensor = torch.as_tensor(tensor, dtype=torch.float32, device=torch.device("cpu"))
+        else:
+            tensor = tensor.to(torch.float32)
         if tensor.numel() == 0:
             # Use reshape, so we don't end up creating a new tensor that does not depend on
             # the inputs (and consequently confuses jit)
-            tensor = tensor.reshape((0, 4)).to(dtype=torch.float32, device=device)
+            tensor = tensor.reshape((-1, 4)).to(dtype=torch.float32)
         assert tensor.dim() == 2 and tensor.size(-1) == 4, tensor.size()
 
         self.tensor = tensor
@@ -166,9 +165,9 @@ class Boxes:
         """
         return Boxes(self.tensor.clone())
 
-    @torch.jit.unused
-    def to(self, *args: Any, **kwargs: Any):
-        return Boxes(self.tensor.to(*args, **kwargs))
+    def to(self, device: torch.device):
+        # Boxes are assumed float32 and does not support to(dtype)
+        return Boxes(self.tensor.to(device=device))
 
     def area(self) -> torch.Tensor:
         """
@@ -191,10 +190,11 @@ class Boxes:
         """
         assert torch.isfinite(self.tensor).all(), "Box tensor contains infinite or NaN!"
         h, w = box_size
-        self.tensor[:, 0].clamp_(min=0, max=w)
-        self.tensor[:, 1].clamp_(min=0, max=h)
-        self.tensor[:, 2].clamp_(min=0, max=w)
-        self.tensor[:, 3].clamp_(min=0, max=h)
+        x1 = self.tensor[:, 0].clamp(min=0, max=w)
+        y1 = self.tensor[:, 1].clamp(min=0, max=h)
+        x2 = self.tensor[:, 2].clamp(min=0, max=w)
+        y2 = self.tensor[:, 3].clamp(min=0, max=h)
+        self.tensor = torch.stack((x1, y1, x2, y2), dim=-1)
 
     def nonempty(self, threshold: float = 0.0) -> torch.Tensor:
         """
@@ -212,7 +212,7 @@ class Boxes:
         keep = (widths > threshold) & (heights > threshold)
         return keep
 
-    def __getitem__(self, item):
+    def __getitem__(self, item) -> "Boxes":
         """
         Args:
             item: int, slice, or a BoolTensor
@@ -275,10 +275,8 @@ class Boxes:
         self.tensor[:, 0::2] *= scale_x
         self.tensor[:, 1::2] *= scale_y
 
-    # classmethod not supported by torchscript. TODO try staticmethod
     @classmethod
-    @torch.jit.unused
-    def cat(cls, boxes_list):
+    def cat(cls, boxes_list: List["Boxes"]) -> "Boxes":
         """
         Concatenates a list of Boxes into a single Boxes
 
@@ -337,10 +335,10 @@ def pairwise_intersection(boxes1: Boxes, boxes2: Boxes) -> torch.Tensor:
 # with slight modifications
 def pairwise_iou(boxes1: Boxes, boxes2: Boxes) -> torch.Tensor:
     """
-    Given two lists of boxes of size N and M,
-    compute the IoU (intersection over union)
-    between __all__ N x M pairs of boxes.
+    Given two lists of boxes of size N and M, compute the IoU
+    (intersection over union) between **all** N x M pairs of boxes.
     The box order must be (xmin, ymin, xmax, ymax).
+
     Args:
         boxes1,boxes2 (Boxes): two `Boxes`. Contains N & M boxes, respectively.
 
@@ -362,7 +360,7 @@ def pairwise_iou(boxes1: Boxes, boxes2: Boxes) -> torch.Tensor:
 
 def pairwise_ioa(boxes1: Boxes, boxes2: Boxes) -> torch.Tensor:
     """
-    Similar to pariwise_iou but compute the IoA (intersection over boxes2 area).
+    Similar to :func:`pariwise_iou` but compute the IoA (intersection over boxes2 area).
 
     Args:
         boxes1,boxes2 (Boxes): two `Boxes`. Contains N & M boxes, respectively.
@@ -380,15 +378,34 @@ def pairwise_ioa(boxes1: Boxes, boxes2: Boxes) -> torch.Tensor:
     return ioa
 
 
-def matched_boxlist_iou(boxes1: Boxes, boxes2: Boxes) -> torch.Tensor:
+def pairwise_point_box_distance(points: torch.Tensor, boxes: Boxes):
     """
-    Compute pairwise intersection over union (IOU) of two sets of matched
-    boxes. The box order must be (xmin, ymin, xmax, ymax).
-    Similar to boxlist_iou, but computes only diagonal elements of the matrix
+    Pairwise distance between N points and M boxes. The distance between a
+    point and a box is represented by the distance from the point to 4 edges
+    of the box. Distances are all positive when the point is inside the box.
 
     Args:
-        boxes1: (Boxes) bounding boxes, sized [N,4].
-        boxes2: (Boxes) bounding boxes, sized [N,4].
+        points: Nx2 coordinates. Each row is (x, y)
+        boxes: M boxes
+
+    Returns:
+        Tensor: distances of size (N, M, 4). The 4 values are distances from
+            the point to the left, top, right, bottom of the box.
+    """
+    x, y = points.unsqueeze(dim=2).unbind(dim=1)  # (N, 1)
+    x0, y0, x1, y1 = boxes.tensor.unsqueeze(dim=0).unbind(dim=2)  # (1, M)
+    return torch.stack([x - x0, y - y0, x1 - x, y1 - y], dim=2)
+
+
+def matched_pairwise_iou(boxes1: Boxes, boxes2: Boxes) -> torch.Tensor:
+    """
+    Compute pairwise intersection over union (IOU) of two sets of matched
+    boxes that have the same number of boxes.
+    Similar to :func:`pairwise_iou`, but computes only diagonal elements of the matrix.
+
+    Args:
+        boxes1 (Boxes): bounding boxes, sized [N,4].
+        boxes2 (Boxes): same length as boxes1
     Returns:
         Tensor: iou, sized [N].
     """

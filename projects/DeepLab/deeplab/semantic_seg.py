@@ -1,4 +1,4 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 from typing import Callable, Dict, List, Optional, Tuple, Union
 import fvcore.nn.weight_init as weight_init
 import torch
@@ -6,7 +6,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from detectron2.config import configurable
-from detectron2.layers import ASPP, Conv2d, ShapeSpec, get_norm
+from detectron2.layers import ASPP, Conv2d, DepthwiseSeparableConv2d, ShapeSpec, get_norm
 from detectron2.modeling import SEM_SEG_HEADS_REGISTRY
 
 from .loss import DeepLabCE
@@ -23,7 +23,6 @@ class DeepLabV3PlusHead(nn.Module):
         self,
         input_shape: Dict[str, ShapeSpec],
         *,
-        in_features: List[str],
         project_channels: List[int],
         aspp_dilations: List[int],
         aspp_dropout: float,
@@ -35,18 +34,16 @@ class DeepLabV3PlusHead(nn.Module):
         loss_type: str = "cross_entropy",
         ignore_value: int = -1,
         num_classes: Optional[int] = None,
+        use_depthwise_separable_conv: bool = False,
     ):
         """
         NOTE: this interface is experimental.
 
         Args:
-            input_shape (ShapeSpec): shape of the input feature
-            in_features (list[str]): a list of input feature names, the last
-                name of "in_features" is used as the input to the decoder (i.e.
-                the ASPP module) and rest of "in_features" are low-level feature
-                the the intermediate levels of decoder. "in_features" should be
-                ordered from highest resolution to lowest resolution. For
-                example: ["res2", "res3", "res4", "res5"].
+            input_shape: shape of the input features. They will be ordered by stride
+                and the last one (with largest stride) is used as the input to the
+                decoder (i.e.  the ASPP module); the rest are low-level feature for
+                the intermediate levels of decoder.
             project_channels (list[int]): a list of low-level feature channels.
                 The length should be len(in_features) - 1.
             aspp_dilations (list(int)): a list of 3 dilations in ASPP.
@@ -65,18 +62,23 @@ class DeepLabV3PlusHead(nn.Module):
             ignore_value (int): category to be ignored during training.
             num_classes (int): number of classes, if set to None, the decoder
                 will not construct a predictor.
+            use_depthwise_separable_conv (bool): use DepthwiseSeparableConv2d
+                in ASPP and decoder.
         """
         super().__init__()
+        input_shape = sorted(input_shape.items(), key=lambda x: x[1].stride)
 
         # fmt: off
-        self.in_features      = in_features  # starting from "res2" to "res5"
-        in_channels           = [input_shape[f].channels for f in self.in_features]
+        self.in_features      = [k for k, v in input_shape]  # starting from "res2" to "res5"
+        in_channels           = [x[1].channels for x in input_shape]
+        in_strides            = [x[1].stride for x in input_shape]
         aspp_channels         = decoder_channels[-1]
         self.ignore_value     = ignore_value
         self.common_stride    = common_stride  # output stride
         self.loss_weight      = loss_weight
         self.loss_type        = loss_type
         self.decoder_only     = num_classes is None
+        self.use_depthwise_separable_conv = use_depthwise_separable_conv
         # fmt: on
 
         assert (
@@ -99,7 +101,7 @@ class DeepLabV3PlusHead(nn.Module):
                 # ASPP module
                 if train_size is not None:
                     train_h, train_w = train_size
-                    encoder_stride = input_shape[self.in_features[-1]].stride
+                    encoder_stride = in_strides[-1]
                     if train_h % encoder_stride or train_w % encoder_stride:
                         raise ValueError("Crop size need to be divisible by encoder stride.")
                     pool_h = train_h // encoder_stride
@@ -115,6 +117,7 @@ class DeepLabV3PlusHead(nn.Module):
                     activation=F.relu,
                     pool_kernel_size=pool_kernel_size,
                     dropout=aspp_dropout,
+                    use_depthwise_separable_conv=use_depthwise_separable_conv,
                 )
                 fuse_conv = None
             else:
@@ -126,29 +129,44 @@ class DeepLabV3PlusHead(nn.Module):
                     norm=get_norm(norm, project_channels[idx]),
                     activation=F.relu,
                 )
-                fuse_conv = nn.Sequential(
-                    Conv2d(
+                weight_init.c2_xavier_fill(project_conv)
+                if use_depthwise_separable_conv:
+                    # We use a single 5x5 DepthwiseSeparableConv2d to replace
+                    # 2 3x3 Conv2d since they have the same receptive field,
+                    # proposed in :paper:`Panoptic-DeepLab`.
+                    fuse_conv = DepthwiseSeparableConv2d(
                         project_channels[idx] + decoder_channels[idx + 1],
                         decoder_channels[idx],
-                        kernel_size=3,
-                        padding=1,
-                        bias=use_bias,
-                        norm=get_norm(norm, decoder_channels[idx]),
-                        activation=F.relu,
-                    ),
-                    Conv2d(
-                        decoder_channels[idx],
-                        decoder_channels[idx],
-                        kernel_size=3,
-                        padding=1,
-                        bias=use_bias,
-                        norm=get_norm(norm, decoder_channels[idx]),
-                        activation=F.relu,
-                    ),
-                )
-                weight_init.c2_xavier_fill(project_conv)
-                weight_init.c2_xavier_fill(fuse_conv[0])
-                weight_init.c2_xavier_fill(fuse_conv[1])
+                        kernel_size=5,
+                        padding=2,
+                        norm1=norm,
+                        activation1=F.relu,
+                        norm2=norm,
+                        activation2=F.relu,
+                    )
+                else:
+                    fuse_conv = nn.Sequential(
+                        Conv2d(
+                            project_channels[idx] + decoder_channels[idx + 1],
+                            decoder_channels[idx],
+                            kernel_size=3,
+                            padding=1,
+                            bias=use_bias,
+                            norm=get_norm(norm, decoder_channels[idx]),
+                            activation=F.relu,
+                        ),
+                        Conv2d(
+                            decoder_channels[idx],
+                            decoder_channels[idx],
+                            kernel_size=3,
+                            padding=1,
+                            bias=use_bias,
+                            norm=get_norm(norm, decoder_channels[idx]),
+                            activation=F.relu,
+                        ),
+                    )
+                    weight_init.c2_xavier_fill(fuse_conv[0])
+                    weight_init.c2_xavier_fill(fuse_conv[1])
 
             decoder_stage["project_conv"] = project_conv
             decoder_stage["fuse_conv"] = fuse_conv
@@ -180,8 +198,9 @@ class DeepLabV3PlusHead(nn.Module):
             len(cfg.MODEL.SEM_SEG_HEAD.IN_FEATURES) - 1
         ) + [cfg.MODEL.SEM_SEG_HEAD.ASPP_CHANNELS]
         ret = dict(
-            input_shape=input_shape,
-            in_features=cfg.MODEL.SEM_SEG_HEAD.IN_FEATURES,
+            input_shape={
+                k: v for k, v in input_shape.items() if k in cfg.MODEL.SEM_SEG_HEAD.IN_FEATURES
+            },
             project_channels=cfg.MODEL.SEM_SEG_HEAD.PROJECT_CHANNELS,
             aspp_dilations=cfg.MODEL.SEM_SEG_HEAD.ASPP_DILATIONS,
             aspp_dropout=cfg.MODEL.SEM_SEG_HEAD.ASPP_DROPOUT,
@@ -193,6 +212,7 @@ class DeepLabV3PlusHead(nn.Module):
             loss_type=cfg.MODEL.SEM_SEG_HEAD.LOSS_TYPE,
             ignore_value=cfg.MODEL.SEM_SEG_HEAD.IGNORE_VALUE,
             num_classes=cfg.MODEL.SEM_SEG_HEAD.NUM_CLASSES,
+            use_depthwise_separable_conv=cfg.MODEL.SEM_SEG_HEAD.USE_DEPTHWISE_SEPARABLE_CONV,
         )
         return ret
 
@@ -263,6 +283,7 @@ class DeepLabV3Head(nn.Module):
         self.loss_type        = cfg.MODEL.SEM_SEG_HEAD.LOSS_TYPE
         train_crop_size       = cfg.INPUT.CROP.SIZE
         aspp_dropout          = cfg.MODEL.SEM_SEG_HEAD.ASPP_DROPOUT
+        use_depthwise_separable_conv = cfg.MODEL.SEM_SEG_HEAD.USE_DEPTHWISE_SEPARABLE_CONV
         # fmt: on
 
         assert len(self.in_features) == 1
@@ -287,6 +308,7 @@ class DeepLabV3Head(nn.Module):
             activation=F.relu,
             pool_kernel_size=pool_kernel_size,
             dropout=aspp_dropout,
+            use_depthwise_separable_conv=use_depthwise_separable_conv,
         )
 
         self.predictor = Conv2d(conv_dims, num_classes, kernel_size=1, stride=1, padding=0)

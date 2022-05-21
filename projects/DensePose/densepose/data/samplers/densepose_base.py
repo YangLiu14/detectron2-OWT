@@ -1,17 +1,14 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 
-from typing import List, Optional
+from typing import Any, Dict, List, Tuple
 import torch
 from torch.nn import functional as F
 
 from detectron2.structures import BoxMode, Instances
 
-from ..structures import (
-    DensePoseDataRelative,
-    DensePoseList,
-    DensePoseOutput,
-    resample_output_to_bbox,
-)
+from densepose.converters import ToChartResultConverter
+from densepose.converters.base import IntTupleBox, make_int_box
+from densepose.structures import DensePoseDataRelative, DensePoseList
 
 
 class DensePoseBaseSampler:
@@ -33,32 +30,27 @@ class DensePoseBaseSampler:
 
     def __call__(self, instances: Instances) -> DensePoseList:
         """
-        Convert DensePose predictions (an instance of `DensePoseOutput`)
+        Convert DensePose predictions (an instance of `DensePoseChartPredictorOutput`)
         into DensePose annotations data (an instance of `DensePoseList`)
         """
         boxes_xyxy_abs = instances.pred_boxes.tensor.clone().cpu()
         boxes_xywh_abs = BoxMode.convert(boxes_xyxy_abs, BoxMode.XYXY_ABS, BoxMode.XYWH_ABS)
         dp_datas = []
-        for i, box_xywh in enumerate(boxes_xywh_abs):
-            labels_i, result_i = resample_output_to_bbox(
-                instances.pred_densepose[i], box_xywh, self._confidence_channels()
+        for i in range(len(boxes_xywh_abs)):
+            annotation_i = self._sample(instances[i], make_int_box(boxes_xywh_abs[i]))
+            annotation_i[DensePoseDataRelative.S_KEY] = self._resample_mask(  # pyre-ignore[6]
+                instances[i].pred_densepose
             )
-            annotation_i = self._sample(labels_i.cpu(), result_i.cpu(), box_xywh)
-            annotation_i[DensePoseDataRelative.S_KEY] = self._resample_mask(
-                instances.pred_densepose[i]
-            )
-
             dp_datas.append(DensePoseDataRelative(annotation_i))
         # create densepose annotations on CPU
         dp_list = DensePoseList(dp_datas, boxes_xyxy_abs, instances.image_size)
         return dp_list
 
-    def _sample(
-        self, labels: torch.Tensor, dp_result: torch.Tensor, bbox_xywh: List[int]
-    ) -> DensePoseDataRelative:
+    def _sample(self, instance: Instances, bbox_xywh: IntTupleBox) -> Dict[str, List[Any]]:
         """
         Sample DensPoseDataRelative from estimation results
         """
+        labels, dp_result = self._produce_labels_and_results(instance)
         annotation = {
             DensePoseDataRelative.X_KEY: [],
             DensePoseDataRelative.Y_KEY: [],
@@ -66,7 +58,6 @@ class DensePoseBaseSampler:
             DensePoseDataRelative.V_KEY: [],
             DensePoseDataRelative.I_KEY: [],
         }
-        x0, y0, _, _ = bbox_xywh
         n, h, w = dp_result.shape
         for part_id in range(1, DensePoseDataRelative.N_PART_LABELS + 1):
             # indices - tuple of 3 1D tensors of size k
@@ -100,12 +91,6 @@ class DensePoseBaseSampler:
             annotation[DensePoseDataRelative.I_KEY].extend(fine_segm_labels)
         return annotation
 
-    def _confidence_channels(self) -> Optional[List[str]]:
-        """
-        Confedence channels to be used for sampling (to be overridden in children)
-        """
-        return None
-
     def _produce_index_sample(self, values: torch.Tensor, count: int):
         """
         Abstract method to produce a sample of indices to select data
@@ -117,29 +102,62 @@ class DensePoseBaseSampler:
                 n: number of channels (U, V, confidences)
                 k: number of points labeled with part_id
             count (int): number of samples to produce, should be positive and <= k
-:w
 
         Return:
             list(int): indices of values (along axis 1) selected as a sample
         """
         raise NotImplementedError
 
-    def _resample_mask(self, output: DensePoseOutput) -> torch.Tensor:
+    def _produce_labels_and_results(self, instance: Instances) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Convert output mask tensors into the annotation mask tensor of size
-        (256, 256)
+        Method to get labels and DensePose results from an instance
+
+        Args:
+            instance (Instances): an instance of `DensePoseChartPredictorOutput`
+
+        Return:
+            labels (torch.Tensor): shape [H, W], DensePose segmentation labels
+            dp_result (torch.Tensor): shape [2, H, W], stacked DensePose results u and v
+        """
+        converter = ToChartResultConverter
+        chart_result = converter.convert(instance.pred_densepose, instance.pred_boxes)
+        labels, dp_result = chart_result.labels.cpu(), chart_result.uv.cpu()
+        return labels, dp_result
+
+    def _resample_mask(self, output: Any) -> torch.Tensor:
+        """
+        Convert DensePose predictor output to segmentation annotation - tensors of size
+        (256, 256) and type `int64`.
+
+        Args:
+            output: DensePose predictor output with the following attributes:
+             - coarse_segm: tensor of size [N, D, H, W] with unnormalized coarse
+               segmentation scores
+             - fine_segm: tensor of size [N, C, H, W] with unnormalized fine
+               segmentation scores
+        Return:
+            Tensor of size (S, S) and type `int64` with coarse segmentation annotations,
+            where S = DensePoseDataRelative.MASK_SIZE
         """
         sz = DensePoseDataRelative.MASK_SIZE
         S = (
-            F.interpolate(output.S, (sz, sz), mode="bilinear", align_corners=False)
+            # pyre-fixme[16]: `Tensor` has no attribute `argmax`.
+            # pyre-fixme[6]: Expected `Optional[int]` for 2nd param but got
+            #  `Tuple[int, int]`.
+            F.interpolate(output.coarse_segm, (sz, sz), mode="bilinear", align_corners=False)
             .argmax(dim=1)
             .long()
         )
         I = (
             (
-                F.interpolate(output.I, (sz, sz), mode="bilinear", align_corners=False).argmax(
-                    dim=1
-                )
+                F.interpolate(
+                    output.fine_segm,
+                    # pyre-fixme[6]: Expected `Optional[int]` for 2nd param but got
+                    #  `Tuple[int, int]`.
+                    (sz, sz),
+                    mode="bilinear",
+                    align_corners=False,
+                ).argmax(dim=1)
                 * (S > 0).long()
             )
             .squeeze()

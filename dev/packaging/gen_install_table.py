@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# Copyright (c) Facebook, Inc. and its affiliates.
 # -*- coding: utf-8 -*-
 
 import argparse
@@ -7,7 +8,16 @@ template = """<details><summary> install </summary><pre><code>\
 python -m pip install detectron2{d2_version} -f \\
   https://dl.fbaipublicfiles.com/detectron2/wheels/{cuda}/torch{torch}/index.html
 </code></pre> </details>"""
-CUDA_SUFFIX = {"10.2": "cu102", "10.1": "cu101", "10.0": "cu100", "9.2": "cu92", "cpu": "cpu"}
+CUDA_SUFFIX = {
+    "11.3": "cu113",
+    "11.1": "cu111",
+    "11.0": "cu110",
+    "10.2": "cu102",
+    "10.1": "cu101",
+    "10.0": "cu100",
+    "9.2": "cu92",
+    "cpu": "cpu",
+}
 
 
 def gen_header(torch_versions):
@@ -26,12 +36,14 @@ if __name__ == "__main__":
     d2_version = f"=={args.d2_version}" if args.d2_version else ""
 
     all_versions = (
-        [("1.4", k) for k in ["10.1", "10.0", "9.2", "cpu"]]
-        + [("1.5", k) for k in ["10.2", "10.1", "9.2", "cpu"]]
-        + [("1.6", k) for k in ["10.2", "10.1", "9.2", "cpu"]]
+        [("1.8", k) for k in ["11.1", "10.2", "10.1", "cpu"]]
+        + [("1.9", k) for k in ["11.1", "10.2", "cpu"]]
+        + [("1.10", k) for k in ["11.3", "11.1", "10.2", "cpu"]]
     )
 
-    torch_versions = sorted({k[0] for k in all_versions}, key=float, reverse=True)
+    torch_versions = sorted(
+        {k[0] for k in all_versions}, key=lambda x: int(x.split(".")[1]), reverse=True
+    )
     cuda_versions = sorted(
         {k[1] for k in all_versions}, key=lambda x: float(x) if x != "cpu" else 0, reverse=True
     )

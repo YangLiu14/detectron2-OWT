@@ -1,6 +1,8 @@
 # Use Models
 
-Models (and their sub-models) in detectron2 are built by
+## Build Models from Yacs Config
+From a yacs config object,
+models (and their sub-models) can be built by
 functions such as `build_model`, `build_backbone`, `build_roi_heads`:
 ```python
 from detectron2.modeling import build_model
@@ -51,7 +53,7 @@ It includes default behavior including model loading, preprocessing,
 and operates on single image rather than batches. See its documentation for usage.
 
 You can also run inference directly like this:
-```
+```python
 model.eval()
 with torch.no_grad():
   outputs = model(inputs)
@@ -69,10 +71,12 @@ The dict may contain the following keys:
 * "image": `Tensor` in (C, H, W) format. The meaning of channels are defined by `cfg.INPUT.FORMAT`.
   Image normalization, if any, will be performed inside the model using
   `cfg.MODEL.PIXEL_{MEAN,STD}`.
-* "height", "width": the **desired** output height and width, which is not necessarily the same
+* "height", "width": the **desired** output height and width **in inference**, which is not necessarily the same
   as the height or width of the `image` field.
   For example, the `image` field contains the resized image, if resize is used as a preprocessing step.
   But you may want the outputs to be in **original** resolution.
+  If provided, the model will produce output in this resolution,
+  rather than in the resolution of the `image` as input into the model. This is more efficient and accurate.
 * "instances": an [Instances](../modules/structures.html#detectron2.structures.Instances)
   object for training, with the following fields:
   + "gt_boxes": a [Boxes](../modules/structures.html#detectron2.structures.Boxes) object storing N boxes, one for each instance.
@@ -81,16 +85,17 @@ The dict may contain the following keys:
     or [BitMasks](../modules/structures.html#detectron2.structures.BitMasks) object storing N masks, one for each instance.
   + "gt_keypoints": a [Keypoints](../modules/structures.html#detectron2.structures.Keypoints)
     object storing N keypoint sets, one for each instance.
+* "sem_seg": `Tensor[int]` in (H, W) format. The semantic segmentation ground truth for training.
+  Values represent category labels starting from 0.
 * "proposals": an [Instances](../modules/structures.html#detectron2.structures.Instances)
   object used only in Fast R-CNN style models, with the following fields:
   + "proposal_boxes": a [Boxes](../modules/structures.html#detectron2.structures.Boxes) object storing P proposal boxes.
   + "objectness_logits": `Tensor`, a vector of P scores, one for each proposal.
 
-  If provided, the model will produce output in this resolution,
-  rather than in the resolution of the `image` as input into the model. This is more efficient and accurate.
-* "sem_seg": `Tensor[int]` in (H, W) format. The semantic segmentation ground truth for training.
-  Values represent category labels starting from 0.
+For inference of builtin models, only "image" key is required, and "width/height" are optional.
 
+We currently don't define standard input format for panoptic segmentation training,
+because models now use custom formats produced by custom data loaders.
 
 #### How it connects to data loader:
 
@@ -109,23 +114,33 @@ Based on the tasks the model is doing, each dict may contain the following field
 * "instances": [Instances](../modules/structures.html#detectron2.structures.Instances)
   object with the following fields:
   * "pred_boxes": [Boxes](../modules/structures.html#detectron2.structures.Boxes) object storing N boxes, one for each detected instance.
-  * "scores": `Tensor`, a vector of N scores.
+  * "scores": `Tensor`, a vector of N confidence scores.
   * "pred_classes": `Tensor`, a vector of N labels in range [0, num_categories).
   + "pred_masks": a `Tensor` of shape (N, H, W), masks for each detected instance.
   + "pred_keypoints": a `Tensor` of shape (N, num_keypoint, 3).
-    Each row in the last dimension is (x, y, score). Scores are larger than 0.
+    Each row in the last dimension is (x, y, score). Confidence scores are larger than 0.
 * "sem_seg": `Tensor` of (num_categories, H, W), the semantic segmentation prediction.
 * "proposals": [Instances](../modules/structures.html#detectron2.structures.Instances)
   object with the following fields:
   * "proposal_boxes": [Boxes](../modules/structures.html#detectron2.structures.Boxes)
     object storing N boxes.
-  * "objectness_logits": a torch vector of N scores.
-* "panoptic_seg": A tuple of `(Tensor, list[dict])`. The tensor has shape (H, W), where each element
-  represent the segment id of the pixel. Each dict describes one segment id and has the following fields:
-  * "id": the segment id
-  * "isthing": whether the segment is a thing or stuff
-  * "category_id": the category id of this segment. It represents the thing
-       class id when `isthing==True`, and the stuff class id otherwise.
+  * "objectness_logits": a torch vector of N confidence scores.
+* "panoptic_seg": A tuple of `(pred: Tensor, segments_info: Optional[list[dict]])`.
+  The `pred` tensor has shape (H, W), containing the segment id of each pixel.
+
+  * If `segments_info` exists, each dict describes one segment id in `pred` and has the following fields:
+
+    * "id": the segment id
+    * "isthing": whether the segment is a thing or stuff
+    * "category_id": the category id of this segment.
+
+    If a pixel's id does not exist in `segments_info`, it is considered to be void label
+    defined in [Panoptic Segmentation](https://arxiv.org/abs/1801.00868).
+
+  * If `segments_info` is None, all pixel values in `pred` must be ≥ -1.
+    Pixels with value -1 are assigned void labels.
+    Otherwise, the category id of each pixel is obtained by
+    `category_id = pixel // metadata.label_divisor`.
 
 
 ### Partially execute a model:

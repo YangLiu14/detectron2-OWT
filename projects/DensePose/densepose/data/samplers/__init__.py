@@ -1,6 +1,8 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 
 from .densepose_uniform import DensePoseUniformSampler
 from .densepose_confidence_based import DensePoseConfidenceBasedSampler
-from .mask_from_densepose import MaskFromDensePoseSampler, densepose_to_mask
+from .densepose_cse_uniform import DensePoseCSEUniformSampler
+from .densepose_cse_confidence_based import DensePoseCSEConfidenceBasedSampler
+from .mask_from_densepose import MaskFromDensePoseSampler
 from .prediction_to_gt import PredictionToGroundTruthSampler

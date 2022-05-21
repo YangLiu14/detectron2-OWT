@@ -1,4 +1,4 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 import itertools
 from typing import Any, Dict, List, Tuple, Union
 import torch
@@ -141,7 +141,8 @@ class Instances:
 
     def __len__(self) -> int:
         for v in self._fields.values():
-            return len(v)
+            # use __len__ because len() has to be int and is not friendly to tracing
+            return v.__len__()
         raise NotImplementedError("Empty Instances does not support __len__!")
 
     def __iter__(self):
@@ -162,8 +163,9 @@ class Instances:
             return instance_lists[0]
 
         image_size = instance_lists[0].image_size
-        for i in instance_lists[1:]:
-            assert i.image_size == image_size
+        if not isinstance(image_size, torch.Tensor):  # could be a tensor in tracing
+            for i in instance_lists[1:]:
+                assert i.image_size == image_size
         ret = Instances(image_size)
         for k in instance_lists[0]._fields.keys():
             values = [i.get(k) for i in instance_lists]

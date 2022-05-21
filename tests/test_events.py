@@ -1,10 +1,10 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 import json
 import os
 import tempfile
 import unittest
 
-from detectron2.utils.events import EventStorage, JSONWriter
+from detectron2.utils.events import CommonMetricPrinter, EventStorage, JSONWriter
 
 
 class TestEventWriter(unittest.TestCase):
@@ -44,3 +44,21 @@ class TestEventWriter(unittest.TestCase):
                 self.assertTrue([int(k.get("key2", 0)) for k in data] == [17, 0, 34, 0, 51, 0])
                 self.assertTrue([int(k.get("key", 0)) for k in data] == [0, 19, 0, 39, 0, 59])
                 self.assertTrue([int(k["iteration"]) for k in data] == [17, 19, 34, 39, 51, 59])
+
+    def testPrintETA(self):
+        with EventStorage() as s:
+            p1 = CommonMetricPrinter(10)
+            p2 = CommonMetricPrinter()
+
+            s.put_scalar("time", 1.0)
+            s.step()
+            s.put_scalar("time", 1.0)
+            s.step()
+
+            with self.assertLogs("detectron2.utils.events") as logs:
+                p1.write()
+            self.assertIn("eta", logs.output[0])
+
+            with self.assertLogs("detectron2.utils.events") as logs:
+                p2.write()
+            self.assertNotIn("eta", logs.output[0])

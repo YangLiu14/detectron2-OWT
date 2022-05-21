@@ -1,3 +1,4 @@
+# Copyright (c) Facebook, Inc. and its affiliates.
 import unittest
 import torch
 
@@ -36,6 +37,16 @@ class TestBitMask(unittest.TestCase):
 
             reconstruct_box = PolygonMasks([[poly]]).get_bounding_boxes()[0].tensor
             self.assertTrue(torch.all(box == reconstruct_box).item())
+
+    def test_from_empty_polygons(self):
+        masks = BitMasks.from_polygon_masks([], 100, 100)
+        self.assertEqual(masks.tensor.shape, (0, 100, 100))
+
+    def test_getitem(self):
+        masks = BitMasks(torch.ones(3, 10, 10))
+        self.assertEqual(masks[1].tensor.shape, (1, 10, 10))
+        self.assertEqual(masks[1:3].tensor.shape, (2, 10, 10))
+        self.assertEqual(masks[torch.tensor([True, False, False])].tensor.shape, (1, 10, 10))
 
 
 if __name__ == "__main__":

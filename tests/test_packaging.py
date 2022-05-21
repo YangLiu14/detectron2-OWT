@@ -1,4 +1,4 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 import unittest
 
 from detectron2.utils.collect_env import collect_env_info
@@ -13,6 +13,10 @@ class TestProjects(unittest.TestCase):
         import detectron2.projects.deeplab as deeplab
 
         _ = deeplab.add_deeplab_config
+
+        # import detectron2.projects.panoptic_deeplab as panoptic_deeplab
+
+        # _ = panoptic_deeplab.add_panoptic_deeplab_config
 
 
 class TestCollectEnv(unittest.TestCase):

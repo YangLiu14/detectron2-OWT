@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Copyright (c) Facebook, Inc. and its affiliates.
 
 import copy
 import logging
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 import torch
-from fvcore.common.file_io import PathManager
 
 from detectron2.data import MetadataCatalog
 from detectron2.data import detection_utils as utils
 from detectron2.data import transforms as T
 from detectron2.layers import ROIAlign
 from detectron2.structures import BoxMode
+from detectron2.utils.file_io import PathManager
 
-from .structures import DensePoseDataRelative, DensePoseList, DensePoseTransformData
+from densepose.structures import DensePoseDataRelative, DensePoseList, DensePoseTransformData
 
 
 def build_augmentation(cfg, is_train):
@@ -143,7 +143,7 @@ class DatasetMapper:
         return annotation
 
     def _add_densepose_masks_as_segmentation(
-        self, annotations: Dict[str, Any], image_shape_hw: Tuple[int, int]
+        self, annotations: List[Dict[str, Any]], image_shape_hw: Tuple[int, int]
     ):
         for obj in annotations:
             if ("densepose" not in obj) or ("segmentation" in obj):
