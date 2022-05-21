@@ -119,6 +119,10 @@ def get_checkpoint_url(config_path):
     Returns:
         str: a URL to the model
     """
+    # ==== OWT ====
+    if "_OWT" in config_path:
+        config_path = '_'.join(config_path.split('_')[:-1])
+    # =============
     url = _ModelZooUrls.query(config_path)
     if url is None:
         raise RuntimeError("Pretrained model for {} is not available!".format(config_path))
