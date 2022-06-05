@@ -798,7 +798,7 @@ class StandardROIHeads(ROIHeads):
         box_features = self.box_pooler(features, [x.proposal_boxes for x in proposals])
         box_features = self.box_head(box_features)
         predictions = self.box_predictor(box_features)
-        del box_features
+        # del box_features  # OWT
 
         if self.training:
             losses = self.box_predictor.losses(predictions, proposals)
@@ -812,7 +812,10 @@ class StandardROIHeads(ROIHeads):
                         proposals_per_image.proposal_boxes = Boxes(pred_boxes_per_image)
             return losses
         else:
-            pred_instances, _ = self.box_predictor.inference(predictions, proposals)
+            # ==== OWT ====
+            pred_instances, _ = self.box_predictor.inference(predictions, proposals, box_features)
+            # pred_instances, _ = self.box_predictor.inference(predictions, proposals)
+            # =============
             return pred_instances
 
     def _forward_mask(self, features: Dict[str, torch.Tensor], instances: List[Instances]):

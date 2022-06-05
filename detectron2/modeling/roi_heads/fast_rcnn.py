@@ -46,6 +46,8 @@ Naming convention:
 def fast_rcnn_inference(
     boxes: List[torch.Tensor],
     scores: List[torch.Tensor],
+    objectness_scores,  # OWT
+    features,  # OWT
     image_shapes: List[Tuple[int, int]],
     score_thresh: float,
     nms_thresh: float,
@@ -77,10 +79,16 @@ def fast_rcnn_inference(
             the corresponding boxes/scores index in [0, Ri) from the input, for image i.
     """
     result_per_image = [
+        # ==== OWT ====
+        # fast_rcnn_inference_single_image(
+        #     boxes_per_image, scores_per_image, image_shape, score_thresh, nms_thresh, topk_per_image
+        # )
+        # for scores_per_image, boxes_per_image, image_shape in zip(scores, boxes, image_shapes)
         fast_rcnn_inference_single_image(
-            boxes_per_image, scores_per_image, image_shape, score_thresh, nms_thresh, topk_per_image
+            boxes_per_image, scores_per_image, objectness_per_image, features, image_shape, score_thresh, nms_thresh, topk_per_image
         )
-        for scores_per_image, boxes_per_image, image_shape in zip(scores, boxes, image_shapes)
+        for scores_per_image, objectness_per_image, boxes_per_image, image_shape in zip(scores, objectness_scores, boxes, image_shapes)
+        # =============
     ]
     return [x[0] for x in result_per_image], [x[1] for x in result_per_image]
 
@@ -118,6 +126,8 @@ def _log_classification_stats(pred_logits, gt_classes, prefix="fast_rcnn"):
 def fast_rcnn_inference_single_image(
     boxes,
     scores,
+    objectness_scores,  # OWT
+    features,  # OWT
     image_shape: Tuple[int, int],
     score_thresh: float,
     nms_thresh: float,
@@ -139,7 +149,9 @@ def fast_rcnn_inference_single_image(
         boxes = boxes[valid_mask]
         scores = scores[valid_mask]
 
+    bg_scores = scores[:, -1]  # OWT
     scores = scores[:, :-1]
+    num_classes = scores.shape[1]  # OWT
     num_bbox_reg_classes = boxes.shape[1] // 4
     # Convert to Boxes to use the `clip` function ...
     boxes = Boxes(boxes.reshape(-1, 4))
@@ -163,10 +175,19 @@ def fast_rcnn_inference_single_image(
     if topk_per_image >= 0:
         keep = keep[:topk_per_image]
     boxes, scores, filter_inds = boxes[keep], scores[keep], filter_inds[keep]
+    # OWT: Find out which row are kept in the original scores tensor (1000, 80+1),
+    # and select the corresponding bg_scores
+    keep_row = torch.div(keep, num_classes, rounding_mode='trunc')
+    bg_scores = bg_scores[keep_row]
+    objectness_scores = objectness_scores[keep_row]
+    features = features[keep_row]
 
     result = Instances(image_shape)
     result.pred_boxes = Boxes(boxes)
     result.scores = scores
+    result.bg_scores = bg_scores  # OWT
+    result.objectness = objectness_scores  # OWT
+    result.embeddings = features  # OWT
     result.pred_classes = filter_inds[:, 1]
     return result, filter_inds[:, 0]
 
@@ -189,7 +210,7 @@ class FastRCNNOutputLayers(nn.Module):
         test_score_thresh: float = 0.0,
         test_nms_thresh: float = 0.5,
         test_topk_per_image: int = 100,
-        cls_agnostic_bbox_reg: bool = False,
+        cls_agnostic_bbox_reg: bool = True,  # OWT
         smooth_l1_beta: float = 0.0,
         box_reg_loss_type: str = "smooth_l1",
         loss_weight: Union[float, Dict[str, float]] = 1.0,
@@ -462,7 +483,7 @@ class FastRCNNOutputLayers(nn.Module):
         # in minibatch (2) are given equal influence.
         return loss_box_reg / max(gt_classes.numel(), 1.0)  # return 0 if empty
 
-    def inference(self, predictions: Tuple[torch.Tensor, torch.Tensor], proposals: List[Instances]):
+    def inference(self, predictions: Tuple[torch.Tensor, torch.Tensor], proposals: List[Instances], features):
         """
         Args:
             predictions: return values of :meth:`forward()`.
@@ -473,12 +494,18 @@ class FastRCNNOutputLayers(nn.Module):
             list[Instances]: same as `fast_rcnn_inference`.
             list[Tensor]: same as `fast_rcnn_inference`.
         """
+        # ==== OWT ====
+        softmax = torch.nn.Softmax(dim=0)
+        objectness_scores = [softmax(proposals[0].objectness_logits)]
+        # =============
         boxes = self.predict_boxes(predictions, proposals)
         scores = self.predict_probs(predictions, proposals)
         image_shapes = [x.image_size for x in proposals]
         return fast_rcnn_inference(
             boxes,
             scores,
+            objectness_scores,  # OWT
+            features,   # OWT
             image_shapes,
             self.test_score_thresh,
             self.test_nms_thresh,

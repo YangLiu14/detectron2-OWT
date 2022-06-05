@@ -160,10 +160,15 @@ class CascadeROIHeads(StandardROIHeads):
                 Each has fields "proposal_boxes", and "objectness_logits",
                 "gt_classes", "gt_boxes".
         """
+        # ==== OWT ====
+        softmax = torch.nn.Softmax()
+        objectness_scores = [softmax(proposals[0].objectness_logits)]
+        # =============
         features = [features[f] for f in self.box_in_features]
         head_outputs = []  # (predictor, predictions, proposals)
         prev_pred_boxes = None
         image_sizes = [x.image_size for x in proposals]
+        box_features_list = list()  # OWT
         for k in range(self.num_cascade_stages):
             if k > 0:
                 # The output boxes of the previous stage are used to create the input
@@ -171,7 +176,11 @@ class CascadeROIHeads(StandardROIHeads):
                 proposals = self._create_proposals_from_boxes(prev_pred_boxes, image_sizes)
                 if self.training:
                     proposals = self._match_and_label_boxes(proposals, k, targets)
-            predictions = self._run_stage(features, proposals, k)
+            # ==== OWT ====
+            # predictions = self._run_stage(features, proposals, k)
+            predictions, box_features = self._run_stage(features, proposals, k)
+            box_features_list.append(box_features)
+            # =============
             prev_pred_boxes = self.box_predictor[k].predict_boxes(predictions, proposals)
             head_outputs.append((self.box_predictor[k], predictions, proposals))
 
@@ -195,9 +204,14 @@ class CascadeROIHeads(StandardROIHeads):
             # Use the boxes of the last head
             predictor, predictions, proposals = head_outputs[-1]
             boxes = predictor.predict_boxes(predictions, proposals)
+            # ==== OWT ====
+            out_features = box_features_list[-1]  # only use the features in the last stage
+            # =============
             pred_instances, _ = fast_rcnn_inference(
                 boxes,
                 scores,
+                objectness_scores,  # OWT
+                out_features,  # OWT
                 image_sizes,
                 predictor.test_score_thresh,
                 predictor.test_nms_thresh,
@@ -273,7 +287,10 @@ class CascadeROIHeads(StandardROIHeads):
         if self.training:
             box_features = _ScaleGradient.apply(box_features, 1.0 / self.num_cascade_stages)
         box_features = self.box_head[stage](box_features)
-        return self.box_predictor[stage](box_features)
+        # ==== OWT ====
+        return self.box_predictor[stage](box_features), box_features
+        # return self.box_predictor[stage](box_features)
+        # =============
 
     def _create_proposals_from_boxes(self, boxes, image_sizes):
         """
