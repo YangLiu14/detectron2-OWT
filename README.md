@@ -1,57 +1,50 @@
 <img src=".github/Detectron2-Logo-Horz.svg" width="300" >
 
-<a href="https://opensource.facebook.com/support-ukraine">
-  <img src="https://img.shields.io/badge/Support-Ukraine-FFD500?style=flat&labelColor=005BBB" alt="Support Ukraine - Help Provide Humanitarian Aid to Ukraine." />
-</a>
+This is a forked version of Detectron2 with modifications for proposal generation as described in 
+["Opening up Open-World Tracking"](https://github.com/YangLiu14/Open-World-Tracking)
 
-Detectron2 is Facebook AI Research's next generation library
-that provides state-of-the-art detection and segmentation algorithms.
-It is the successor of
-[Detectron](https://github.com/facebookresearch/Detectron/)
-and [maskrcnn-benchmark](https://github.com/facebookresearch/maskrcnn-benchmark/).
-It supports a number of computer vision research projects and production applications in Facebook.
-
-<div align="center">
-  <img src="https://user-images.githubusercontent.com/1381301/66535560-d3422200-eace-11e9-9123-5535d469db19.png"/>
-</div>
-<br>
-
-## Learn More about Detectron2
-
-Explain Like I’m 5: Detectron2            |  Using Machine Learning with Detectron2
-:-------------------------:|:-------------------------:
-[![Explain Like I’m 5: Detectron2](https://img.youtube.com/vi/1oq1Ye7dFqc/0.jpg)](https://www.youtube.com/watch?v=1oq1Ye7dFqc)  |  [![Using Machine Learning with Detectron2](https://img.youtube.com/vi/eUSgtfK4ivk/0.jpg)](https://www.youtube.com/watch?v=eUSgtfK4ivk)
-
-## What's New
-* Includes new capabilities such as panoptic segmentation, Densepose, Cascade R-CNN, rotated bounding boxes, PointRend,
-  DeepLab, etc.
-* Used as a library to support building [research projects](projects/) on top of it.
-* Models can be exported to TorchScript format or Caffe2 format for deployment.
-* It [trains much faster](https://detectron2.readthedocs.io/notes/benchmarks.html).
-
-See our [blog post](https://ai.facebook.com/blog/-detectron2-a-pytorch-based-modular-object-detection-library-/)
-to see more demos and learn about detectron2.
-
+To see the modifcations in detail, search globally for "OWT".
 ## Installation
 
 See [installation instructions](https://detectron2.readthedocs.io/tutorials/install.html).
 
-## Getting Started
-
-See [Getting Started with Detectron2](https://detectron2.readthedocs.io/tutorials/getting_started.html),
-and the [Colab Notebook](https://colab.research.google.com/drive/16jcaJoc6bCFAQ96jDe2HwtXj7BMD_-m5)
-to learn about basic usage.
-
-Learn more at our [documentation](https://detectron2.readthedocs.org).
-And see [projects/](projects/) for some projects that are built on top of detectron2.
-
 ## Model Zoo and Baselines
 
-We provide a large set of baseline results and trained models available for download in the [Detectron2 Model Zoo](MODEL_ZOO.md).
+We use the pretrained models from [Detectron2 Model Zoo](MODEL_ZOO.md), and config them to be:
+- no NMS
+- no confidence threshold
+- category-agnostic
 
-## License
+We provide two examples:
 
-Detectron2 is released under the [Apache 2.0 license](LICENSE).
+<table><tbody>
+<!-- START TABLE -->
+<!-- TABLE HEADER -->
+<th valign="bottom">Name</th>
+<th valign="bottom">box<br/>AP</th>
+<th valign="bottom">mask<br/>AP</th>
+<th valign="bottom">model id</th>
+<th valign="bottom">download</th>
+
+<!-- TABLE BODY -->
+
+<!-- ROW: panoptic_fpn_R_101_dconv_cascade_gn_3x-->
+<tr><td align="left"><a href="configs/Misc/owt/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml">Panoptic FPN R101</a></td>
+<td align="center">47.4</td>
+<td align="center">41.3</td>
+<td align="center">139797668</td>
+<td align="center"><a href="https://dl.fbaipublicfiles.com/detectron2/Misc/panoptic_fpn_R_101_dconv_cascade_gn_3x/139797668/model_final_be35db.pkl">model</a></td>
+</tr>
+
+<!-- ROW: mask_rcnn_R_101_FPN_400ep_LSJ -->
+<tr><td align="left"><a href="configs/new_baselines/mask_rcnn_R_101_FPN_400ep_LSJ_OWT.py">R101-FPN-400ep <br/> (new baseline)</a></td>
+<td align="center">48.9</td>
+<td align="center">43.7</td>
+<td align="center">42047764</td>
+<td align="center"><a href="https://dl.fbaipublicfiles.com/detectron2/new_baselines/mask_rcnn_R_101_FPN_400ep_LSJ/42073830/model_final_f96b26.pkl">model</a></td>
+</tr>
+
+</tbody></table>
 
 ## Citing Detectron2
 
@@ -66,3 +59,9 @@ If you use Detectron2 in your research or wish to refer to the baseline results 
   year =         {2019}
 }
 ```
+
+## Citing OWT
+<pre><b>Opening up Open-World Tracking</b>
+Yang Liu*, Idil Esen Zulfikar*, Jonathon Luiten*, Achal Dave*, Deva Ramanan, Bastian Leibe, Aljoša Ošep, Laura Leal-Taixé
+<t><t>*Equal contribution
+CVPR 2022</pre>
