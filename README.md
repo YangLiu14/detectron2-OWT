@@ -46,6 +46,37 @@ We provide two examples:
 
 </tbody></table>
 
+## Proposal Generation (OWT)
+To generate the same set of proposals that we used in the paper "Opening Up Open-World Track",
+you can use the following command.
+
+#### Generate proposals for each frame (valid set)
+```shell
+python owt_scripts/gen_proposals.py \
+  --config-file ../configs/Misc/owt/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml \
+  --input /data/TAO/frames/val/ \   # give your own path
+  --outdir /proposals/val/npz/ \    # give your own path
+  --split val \
+  --opts MODEL.WEIGHTS /model_weights/Panoptic_FPN_R101/model_final_be35db.pkl
+```
+
+#### Generate proposals only for annotated frames (skipping frames)
+```shell
+python owt_scripts/gen_proposals.py \
+  --config-file ../configs/Misc/owt/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml \
+  --input /data/TAO/frames/val/ \   # give your own path
+  --outdir /proposals/val/npz/ \    # give your own path
+  --split val --annot-only \
+  --opts MODEL.WEIGHTS /model_weights/Panoptic_FPN_R101/model_final_be35db.pkl
+```
+
+#### Other useful arguments
+- `--video_src_names` there are 7 datasets in TAO, sometimes you just wanna inference on some of them, 
+then give the video-source-name(s) accordingly, e.g. `--video_src_names ArgoVerse BDD YFCC100M`
+- `--vidx_start` and `--vdix_end` for each video-source, e.g. ArgoVerse, it could contain hundreds of video sequences.
+Use multiple GPUs to generate them could help accelerate the process. These two arguments specifies the start- 
+and the end-idx of the video sequences.
+
 ## Citing Detectron2
 
 If you use Detectron2 in your research or wish to refer to the baseline results published in the [Model Zoo](MODEL_ZOO.md), please use the following BibTeX entry.
