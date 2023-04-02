@@ -3,7 +3,7 @@
 This is a forked version of Detectron2 with modifications for proposal generation as described in 
 ["Opening up Open-World Tracking"](https://github.com/YangLiu14/Open-World-Tracking)
 
-To see the modifcations in detail, search globally for "OWT".
+To see the modifcations (NMS, scorings and appearance-embeddings extraction) in detail, search globally for "OWT".
 ## Installation
 
 See [installation instructions](https://detectron2.readthedocs.io/tutorials/install.html).
