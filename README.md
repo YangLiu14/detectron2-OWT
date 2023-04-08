@@ -11,6 +11,15 @@ git clone git@github.com:YangLiu14/detectron2-OWT.git
 python -m pip install -e detectron2-OWT
 ```
 
+***Attention: If you have previously installed `detectron2` package, remove it before
+the new installation:
+```shell
+cd detectron2-OWT
+pip uninstall detectron2
+rm -rf build/ **/*.so
+cd ..
+```
+
 ## Model Zoo and Baselines
 
 We use the pretrained models from [Detectron2 Model Zoo](MODEL_ZOO.md), and config them to be:
