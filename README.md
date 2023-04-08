@@ -6,7 +6,10 @@ This is a forked version of Detectron2 with modifications for proposal generatio
 To see the modifcations (NMS, scorings and appearance-embeddings extraction) in detail, search globally for "OWT".
 ## Installation
 
-See [installation instructions](https://detectron2.readthedocs.io/tutorials/install.html).
+```shell
+git clone git@github.com:YangLiu14/detectron2-OWT.git
+python -m pip install -e detectron2-OWT
+```
 
 ## Model Zoo and Baselines
 
@@ -53,8 +56,8 @@ you can use the following command.
 #### Generate proposals for each frame (valid set)
 ```shell
 python owt_scripts/gen_proposals.py \
-  --config-file ../configs/Misc/owt/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml \
-  --input /data/TAO/frames/val/ \   # give your own path
+  --config-file ./configs/Misc/owt/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml \
+  --input /data/TAO/frames/ \   # give your own path
   --outdir /proposals/val/npz/ \    # give your own path
   --split val \
   --opts MODEL.WEIGHTS /model_weights/Panoptic_FPN_R101/model_final_be35db.pkl
@@ -63,8 +66,8 @@ python owt_scripts/gen_proposals.py \
 #### Generate proposals only for annotated frames (skipping frames)
 ```shell
 python owt_scripts/gen_proposals.py \
-  --config-file ../configs/Misc/owt/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml \
-  --input /data/TAO/frames/val/ \   # give your own path
+  --config-file ./configs/Misc/owt/panoptic_fpn_R_101_dconv_cascade_gn_3x.yaml \
+  --input /data/TAO/frames/ \   # give your own path
   --outdir /proposals/val/npz/ \    # give your own path
   --split val --annot-only \
   --opts MODEL.WEIGHTS /model_weights/Panoptic_FPN_R101/model_final_be35db.pkl

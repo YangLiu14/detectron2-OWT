@@ -188,7 +188,7 @@ if __name__ == "__main__":
                         store_TAOnpz(predictions, path, valid_classes, curr_outdir)
 
             else:
-                for idx, video_name in enumerate(video_names)[args.vidx_start: args.vidx_end]:
+                for idx, video_name in enumerate(video_names[args.vidx_start: args.vidx_end]):
                     print("PROCESS VIDEO {}: {}".format(idx, video_name))
                     # Find all frames in the path given by args.input
                     seq = sorted(glob.glob(osp.join(data_dir, video_src, video_name, "*.jpg"))) + \
